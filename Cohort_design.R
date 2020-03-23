@@ -41,7 +41,7 @@ library(ggsci)
 library(extrafont) #font
 # library(labeling)
 # library(readr)
-# library(tidyr)
+library(tidyr)
 # library(stringr)
 # library(xlsx)
 # library(naniar)
@@ -72,6 +72,8 @@ Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_pob
 #dictionary datasets
 Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.xlsx")
 Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
+Dic_history_medication <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_medication.xlsx")
+Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
 
 # Little explore with raw dta ---------------------------------------------
 head(billing)
@@ -92,10 +94,11 @@ check_dup_clinical_variables <- distinct(clinical_variables,idp,clinical_cod, cl
 #data preparation
 BMI_dataset <- 
   clinical_variables %>% 
-  filter(clinical_agr == "IMC")
+  filter(clinical_agr == "IMC") %>% 
+  select(-clinical_cod)
 
 
-# select opioid users (stage_one saved datasets ,mainly based on billing dataset) -------------------------------------------------------
+# stage_one:select opioid users (mainly based on billing dataset) -------------------------------------------------------
 set.seed(1)
 sub_Denominator <- sample_frac(Denominator_data, 0.1)
 
@@ -176,18 +179,17 @@ tramadol_non_NSAID <- generate_func(comparator = "Non anti-inflammatory drugs")
 
 
 
-# select eligible cohorts (test codes) ------------------------------------------------------
+# stage_two:select eligible cohorts (test codes) ------------------------------------------------------
 # create auxiliary variables
-
-cohort_all_multiple_row <- 
-  tramadol_celecoxib %>% filter(seq == 1) %>% 
+cohort_all_new <- 
+  tramadol_celecoxib %>% 
+  filter(seq == 1) %>% 
   # filter (select one billing record for each persom)
   left_join( demography, by = "idp") %>% 
   left_join( check_dup_diagnosis, by = "idp") %>% 
   left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
-  # filter(people with linked ICD codes but not the ones studied)
-  # figure out the logic here, it's little complicate
-  filter( !(!is.na( dia_cod) & (dia_cod %nin% Dic_CER_adverse_events$dia_cod))) %>% 
+  #important: check if there are missing values for demographics variables
+  # sapply(function(x)sum(is.na(x)))
   #index for intiation age and continuous register duration
   mutate( initiation_age = as.numeric( difftime(first_time, date_of_birth, units = "days")/365 ),
           initiation_gap = as.numeric( difftime(first_time, entry_date, units = "days")/365) ) %>% 
@@ -202,101 +204,138 @@ cohort_all_multiple_row <-
   # filter (select age>=18 and continuous data >=1 year)
   filter( history_adverse_events == 0, initiation_age >=18, initiation_gap >=1) %>% 
   # # filter (exclude some usefulless disease records)
-  # filter( !(any_adverse_events == 1 & is.na(Disease_Group))) %>% 
+  filter( !(any_adverse_events == 1 & is.na(Disease_Group))) %>% 
   group_by(idp) %>% 
   #index for follow-up period
   mutate(follow_up_time = case_when( any_adverse_events == 0 ~ as.numeric( difftime( departure_date, first_time, units = "days")),
                                      any_adverse_events == 1 ~ as.numeric( min( difftime( dia_start_date, first_time, units = "days"))))) %>% 
-  ungroup() 
+  ungroup() %>% 
+  distinct(idp, sex, first_time, first_drug, initiation_age, any_adverse_events, follow_up_time)
   
 
 bb <- 
-  cohort_all_multiple_row %>% 
-  distinct(idp, first_time, first_drug, initiation_age, any_adverse_events, follow_up_time) %>% 
-  left_join(social_variables, by = "idp") %>% 
-  group_by(first_drug) %>% 
-  summarise(n = n(),mean_age = mean(initiation_age), events = sum(any_adverse_events), mean_follow = as.numeric(mean(follow_up_time)/365)) %>% 
+  cohort_all_multiple_row_new %>% 
+  left_join( social_variables, by = "idp") %>% 
+  group_by( first_drug) %>% 
+  summarise(n = n(), 
+            mean_age = mean(initiation_age), 
+            events = sum(any_adverse_events), 
+            mean_follow = as.numeric(mean(follow_up_time)/365)) %>% 
   ungroup() %>% 
-  mutate(rate = events * 1000 / (n * mean_follow) ) %>% 
-  mutate(ratio = rate[2] / rate[1])
+  mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
+  mutate( ratio = rate[2] / rate[1])
 
 
-
-
-
-
-
-
-# select eligible cohorts (wrap codes) ------------------------------------------------------
+# stage_two:select eligible cohorts (wrap codes) ------------------------------------------------------
 # create auxiliary variables
-
-create_auxiliary <- function(dataset){
-  cohort_all_multiple_row<- 
-    dataset %>% 
-    #first filter (select one billing record for each persom)
+stage_two_function <- function( data){
+  new_dateset <- 
+    data %>% 
     filter(seq == 1) %>% 
-    left_join(demography, by = "idp") %>% 
-    left_join(check_dup_diagnosis, by = "idp") %>% 
-    left_join(Dic_CER_adverse_events, by = "dia_cod") %>% 
+    # filter (select one billing record for each persom)
+    left_join( demography, by = "idp") %>% 
+    left_join( check_dup_diagnosis, by = "idp") %>% 
+    left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
     #index for intiation age and continuous register duration
-    mutate(initiation_age = difftime(first_time, date_of_birth, units = "days")/365,
-           initiation_gap = difftime(first_time, entry_date, units = "days")/365) %>% 
+    mutate( initiation_age = as.numeric( difftime(first_time, date_of_birth, units = "days")/365 ),
+            initiation_gap = as.numeric( difftime(first_time, entry_date, units = "days")/365) ) %>% 
     group_by(idp) %>% 
     #index for previous adverse events 
-    mutate(history_adverse_events = case_when(any(dia_start_date <= first_time & !is.na(Disease_Group)) ~ 1,
-                                              TRUE ~ 0),
-           #index for new adverse events
-           any_adverse_events = case_when(any(dia_start_date > first_time & !is.na(Disease_Group)) ~ 1,
-                                          TRUE ~ 0)) %>%
+    mutate( history_adverse_events = case_when( any( !is.na(Disease_Group) & dia_start_date <= first_time ) ~ 1,
+                                                TRUE ~ 0),
+            #index for new adverse events
+            any_adverse_events = case_when( any( !is.na(Disease_Group) & dia_start_date > first_time ) ~ 1,
+                                            TRUE ~ 0)) %>%
     ungroup() %>% 
-    #second filter (select age>=18 and continuous data >=1 year)
-    filter(history_adverse_events == 0, initiation_age >=18, initiation_gap >=1) %>% 
-    #second filter (exclude some usefulless disease records)
-    filter(!(any_adverse_events == 1 & is.na(Disease_Group))) %>% 
+    # filter (select age>=18 and continuous data >=1 year)
+    filter( history_adverse_events == 0, initiation_age >=18, initiation_gap >=1) %>% 
+    # # filter (exclude some usefulless disease records)
+    filter( !(any_adverse_events == 1 & is.na(Disease_Group))) %>% 
     group_by(idp) %>% 
     #index for follow-up period
-    mutate(follow_up_time = case_when(any_adverse_events == 0 ~ difftime(departure_date, first_time, units = "days"),
-                                      any_adverse_events == 1 & !is.na(Disease_Group) ~ min(difftime(dia_start_date, first_time, units = "days")))) %>% 
-    ungroup() 
-  
-  return(cohort_all_multiple_row)
+    mutate(follow_up_time = case_when( any_adverse_events == 0 ~ as.numeric( difftime( departure_date, first_time, units = "days")),
+                                       any_adverse_events == 1 ~ as.numeric( min( difftime( dia_start_date, first_time, units = "days"))))) %>% 
+    ungroup() %>% 
+    distinct(idp, sex, first_time, first_drug, initiation_age, any_adverse_events, follow_up_time)
+  return(new_dateset)
 }
 
+
 data_raw <- list(tramadol_codeine, tramadol_ibuprofen, tramadol_diclofenac,tramadol_celecoxib, tramadol_Paracetamol)
+stage_two_saved_data <- lapply(data_raw, stage_two_function)
+names(stage_two_saved_data) <- paste( "stage_two", c("tramadol_codeine", "tramadol_ibuprofen", "tramadol_diclofenac","tramadol_celecoxib", "tramadol_Paracetamol"), sep = "_")
+save(stage_two_saved_data, file="R_datasets/stage_two_saved_data.RData")
 
-totol_data <- lapply(data_raw, create_auxiliary)
 
-bb <- 
-  cohort_all_multiple_row %>% 
-  distinct(idp, first_time, first_drug, initiation_age, any_adverse_events, follow_up_time) %>% 
-  left_join(social_variables, by = "idp") %>% 
-  group_by(first_drug) %>% 
-  summarise(n = n(),mean_age = mean(initiation_age), events = sum(any_adverse_events), mean_follow = as.numeric(mean(follow_up_time)/365)) %>% 
+
+
+# stage_three: extract potential confounders (test codes)-------------------------------------------------------------
+
+
+stage_three_saved_data <- 
+  cohort_all_new %>% 
+  left_join( social_variables, by = "idp") %>% 
+  left_join( BMI_dataset, by = "idp") %>% 
+  #deal with missing variables: economic_level, rural
+  mutate(economic_level = case_when(economic_level == "" ~ NA_character_,
+                                    TRUE ~ economic_level),
+         rural = case_when(rural == "" ~ NA_character_,
+                           TRUE ~ rural)) %>% 
+  mutate(BMI_record_gap = as.numeric( difftime(first_time, clinical_date, units = "days"))) %>% 
+  # index for eligiable records of BMI (6 months before index date)
+  mutate( BMI_index_records = case_when( BMI_record_gap >= 0 & BMI_record_gap <= 730 ~ 1,
+                     TRUE ~ 0)) %>% 
+  group_by(idp) %>% 
+  arrange( desc(BMI_index_records), BMI_record_gap) %>% 
+  mutate( BMI_value = case_when(any(BMI_index_records == 1) ~ val[1],
+          TRUE ~ NA_real_)) %>% 
   ungroup() %>% 
-  mutate(rate = events * 1000 / (n * mean_follow) ) %>% 
-  mutate(ratio = rate[2] / rate[1])
+  distinct(idp, sex, first_time, first_drug, initiation_age, any_adverse_events, follow_up_time, 
+           economic_level, rural,
+           BMI_value) %>% 
+  
+  # use check_dup_diagnosis rather than diagnosis
+  left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>% 
+  left_join( Dic_commorbidity, by = "dia_cod") %>% 
+  # index for eligiable records of history of other disease
+  mutate( commorbidities_index_records = case_when( dia_start_date <= first_time & !is.na(commorbidity_label) ~ 1,
+                                        TRUE ~ 0)) %>% 
+  # replace unnecessary disease label with NA
+  mutate( commorbidity_label = case_when(commorbidities_index_records == 1 ~ commorbidity_label,
+                                         TRUE ~ NA_character_)) %>% 
+  # index for eligiable subjects of history of other disease
+  group_by(idp) %>% 
+  mutate( commorbidities_index_subjects = case_when(any(commorbidities_index_records == 1) ~ 1,
+                                                   TRUE ~ 0)) %>% 
+  ungroup() %>% 
+  # filter unnecessary records
+  filter( !(commorbidities_index_subjects == 1 & commorbidities_index_records == 0) ) %>% 
+  # remove duplicate diagnosis
+  distinct(idp, sex, first_time, first_drug, initiation_age, any_adverse_events, follow_up_time, 
+           economic_level, rural,
+           BMI_value,
+           commorbidity_label, commorbidities_index_records) %>% 
+  # transform from long to wide data
+  spread(commorbidity_label, commorbidities_index_records)
+  
+
+save(stage_three_saved_data, file="R_datasets/stage_three_saved_data.RData")
 
 
 
 
 
-
-
-
-
-
-
-
-
-   -------------------------------------
   
   
+  sapply(bb, function(x)sum(is.na(x)))
+
   
-  
-     --------------------------------------
-  
-  
-  
+table(bb$BMI_value, useNA = "always")
+
+?table()
+
+
+
 # Cox-model ---------------------------------------------------------------
 bb <- 
   totol_data[[1]] %>% 
