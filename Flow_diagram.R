@@ -26,6 +26,8 @@ install.packages("hrbrthemes") #https://cran.r-project.org/web/packages/hrbrthem
 install.packages("installr") #Updating R/RStudio: https://uvastatlab.github.io/phdplus/installR.html#updateR
 install.packages("optmatch")
 install.packages('devtools')
+install.packages("fastDummies")
+install.packages("cobalt")
 devtools::install_github('neilstats/ckbplotr')
 
 
@@ -60,7 +62,11 @@ library(hrbrthemes)
 library(tableone)
 library(MatchIt)
 library(optmatch)
-library(ckbplotr)
+# library(ckbplotr)
+library(mice)
+library(lattice)
+library( cobalt)
+# library(fastDummies)
 
 getwd()
 setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety/R codes/Comparative-effect-research")
@@ -83,7 +89,11 @@ Dic_history_medication <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_hist
 Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
 
 #prepared datasets
-load("R_datasets/baseline_cohort.RData")
+# load("R_datasets/baseline_cohort_100.RData")
+# load("R_datasets/follow_up_dateset.RData")
+
+# set.seed(1)
+# baseline_cohort <- sample_frac(baseline_cohort_100, 0.1)
 
 
 # Little explore with raw dta ---------------------------------------------
@@ -110,13 +120,13 @@ BMI_dataset <-
   select(-clinical_cod)
 
 # database population -----------------------------------------------------
-# set.seed(1)
-# sub_Denominator <- sample_frac(Denominator_data, 0.1)
+set.seed(1)
+sub_Denominator <- sample_frac(Denominator_data, 0.1)
 #=======================================================#
 # all registered subjects with billing data after 2007
 #=======================================================#
 database_population <- 
-    Denominator_data %>% 
+  Denominator_data %>% 
     select( idp) %>% 
     left_join( select( billing, -billing_agr), by = "idp") %>% 
     left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
@@ -135,6 +145,28 @@ database_population <-
     ungroup()  
 
 nrow(database_population)
+
+#==================================================================#
+# generate population with study durg during the look-back period 
+#==================================================================#
+look_back_population <- 
+  database_population %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
+  filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "codeine")) %>% 
+  mutate( look_back_date = first_bill_time - 365) %>% 
+  filter( bill_date >= look_back_date, bill_date < first_bill_time) %>% 
+  distinct( idp) %>% 
+  mutate( look_back_index = 1)
+
+
+database_population <- 
+  database_population %>% 
+  left_join( look_back_population, by = "idp") %>% 
+  mutate( look_back_index = case_when( look_back_index == 1 ~ 1,
+                                       TRUE ~ 0))
+
 
 # study population --------------------------------------------------------
 
@@ -174,6 +206,9 @@ study_population_stage2 <-
   select( -dia_cod, -dia_start_date, -cancer_label, -Disease_Group, -Disease_Specific ) %>% 
   ungroup()
 
+
+
+
 nrow(study_population_stage2)
 
 
@@ -189,27 +224,42 @@ Final_cohort_stage1 <-
 nrow(study_population_stage2) - nrow(Final_cohort_stage1) 
 
 #==================================================================#
-# Dispensed both tramadol and codeine on the entry date 
+# withou dispensation one year before index date
 #==================================================================#
 Final_cohort_stage2 <- 
   Final_cohort_stage1 %>% 
-  filter( index_double_user == 0) 
+  filter(  look_back_index == 0) 
 
 nrow(Final_cohort_stage1) - nrow(Final_cohort_stage2) 
+
+
 #==================================================================#
-# No outcomes of interest previous or at the time of the entry date
+# Dispensed both tramadol and codeine on the entry date 
 #==================================================================#
 Final_cohort_stage3 <- 
   Final_cohort_stage2 %>% 
-  filter( history_outcomes == 0) 
+  filter( index_double_user == 0) 
 
 nrow(Final_cohort_stage2) - nrow(Final_cohort_stage3) 
-nrow(Final_cohort_stage3) 
+#==================================================================#
+# No outcomes of interest previous or at the time of the entry date
+#==================================================================#
+Final_cohort_100 <- 
+  Final_cohort_stage3 %>% 
+  filter( history_outcomes == 0) 
+
+nrow(Final_cohort_stage3) - nrow(Final_cohort_100) 
+nrow(Final_cohort_100) 
+
+table( Final_cohort_100$index_double_user)
+
+save(Final_cohort_100, file="R_datasets/Final_cohort_100.RData")
+
 
 
 # Link to other baseline variables ----------------------------------------
-baseline_cohort <- 
-  Final_cohort_stage3 %>% 
+baseline_cohort_100 <- 
+  Final_cohort %>% 
   left_join( social_variables, by = "idp") %>%
   left_join( BMI_dataset, by = "idp") %>%
   
@@ -301,54 +351,167 @@ baseline_cohort <-
   
 
   
-save(baseline_cohort, file="R_datasets/baseline_cohort_100.RData")
+save(baseline_cohort_100, file="R_datasets/baseline_cohort_100.RData")
 
 
 
 
 
 # Follow-up periods -------------------------------------------------------
-follow_up_dateset <- 
-  baseline_cohort %>% 
+
+start.time <- Sys.time()
+follow_up_dataset_ATT_100 <- 
+  baseline_cohort_100 %>% 
   select( idp, first_bill_time, first_bill_drug) %>%
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
+  # filter studied drugs and observation period
+  filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+  group_by( idp) %>% 
+  arrange( bill_date) %>% 
+  mutate( bill_seq = as.numeric( row_number())) %>% 
+  #==================================================================#
+  # cencored date for switching
+  #==================================================================#
+  mutate( switcher = case_when( any(first_bill_drug != Specific_drug) ~ 1,
+                                        TRUE ~ 0),
+          switcher_seq = case_when( first_bill_drug != Specific_drug ~ bill_seq,
+                                    TRUE ~ NA_real_),
+          switcher_seq_index = case_when( switcher == 1  ~ min(switcher_seq, na.rm = TRUE) - 1,
+                                          TRUE ~ NA_real_),
+          switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 15,
+                                   TRUE ~ bill_date[n()] + 15)) %>% 
+  #==================================================================#
+  # cencored date for discontinuation 
+  #==================================================================# 
+  mutate( bill_date_diff = bill_date - lag(bill_date, default = first(bill_date))) %>% 
+  mutate( discontinuationer = case_when( any(bill_date_diff > 90 ) ~ 1,
+                                         TRUE ~ 0),
+          discontinuation_seq = case_when( bill_date_diff > 90 ~ bill_seq,
+                                           TRUE ~ NA_real_),
+          discontinuation_index = case_when( any( discontinuation_seq > 0) ~ min(discontinuation_seq, na.rm = TRUE) - 1,
+                                             TRUE ~ NA_real_),
+          discontinuation_date = case_when( any( discontinuation_seq > 0) ~ bill_date[discontinuation_index] + 15,
+                                            TRUE ~ bill_date[n()] + 15) ) %>% 
+  mutate( cencored_date = pmin( switch_date, discontinuation_date)) %>% 
+  ungroup( idp) %>% 
+  
+  #==================================================================#
+  # calculate follow-up days
+  #==================================================================#
   left_join( select( demography, idp, departure_date), by = "idp") %>% 
   left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
   left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
-
-  #index for follow-up period
-  mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & !is.na(Disease_Specific) ~ 1,
-                                            TRUE ~ 0)) %>% 
-  group_by( idp) %>% 
-  mutate( outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
-                                             TRUE ~ 0)) %>% 
+  #==================================================================#
+  # index for follow-up period (ATT)
+  #==================================================================#
+  mutate( outcome_occur_record_ATT = case_when( dia_start_date > first_bill_time & cencored_date > dia_start_date & !is.na(Disease_Specific) ~ 1,
+                                            TRUE ~ 0)) %>%
+  group_by( idp) %>%
+  mutate( outcome_occur_subject_ATT = case_when( any(outcome_occur_record_ATT == 1) ~ 1,
+                                             TRUE ~ 0)) %>%
+  ungroup() %>%
+  filter( !(outcome_occur_subject_ATT == 1 & outcome_occur_record_ATT == 0)) %>%
+  group_by( idp) %>%
+  mutate( outcome_occur_date_ATT = case_when( outcome_occur_subject_ATT == 1 ~ min(dia_start_date),
+                                          TRUE ~ as.Date("2017-12-31"))) %>%
+  #==================================================================#
+  # condense
+  #==================================================================#
+  distinct( idp, first_bill_time, outcome_occur_subject_ATT, outcome_occur_date_ATT, cencored_date) %>%  
+  mutate( combined_date_ATT = pmin(outcome_occur_date_ATT, cencored_date),
+          follow_up_days_ATT  = as.numeric( difftime( combined_date_ATT , first_bill_time, units = "days"))) %>%
   ungroup() %>% 
-  filter( !(outcome_occur_subject == 1 & outcome_occur_record == 0)) %>% 
-  group_by( idp) %>% 
-  mutate( outcome_occur_time = case_when( outcome_occur_subject == 1 ~ min(dia_start_date),
-                                          TRUE ~ as.Date("2017-12-31"))) %>% 
-  distinct( idp, departure_date, first_bill_time, outcome_occur_subject, outcome_occur_time) %>% 
-  ungroup() %>% 
-  mutate( censored_time = pmin(departure_date, outcome_occur_time),
-          follow_up_time = as.numeric( difftime( censored_time, first_bill_time, units = "days"))) %>% 
-  select( idp, outcome_occur_subject, follow_up_time)
+  select( idp, outcome_occur_subject_ATT, follow_up_days_ATT)
+end.time <- Sys.time()
 
-save(follow_up_dateset, file="R_datasets/follow_up_dateset_100.RData")
+end.time - start.time
 
+
+
+outcome <- Dic_CER_adverse_events %>% distinct( Disease_Group) %>% unlist() %>% unname()
+outcome
+
+
+Follow_ITT_func <- function(outcomes){
+  start.time <- Sys.time()
+  follow_up_dataset <- 
+    baseline_cohort_100 %>% 
+    select( idp, first_bill_time, first_bill_drug) %>%
+    left_join( select( demography, idp, departure_date), by = "idp") %>% 
+    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+    left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
+    #==================================================================#
+    # index for follow-up period (ITT)
+    #==================================================================#
+    mutate( outcome_occur_record_ITT = case_when( dia_start_date > first_bill_time & Disease_Group %in% outcomes ~ 1,
+                                                  TRUE ~ 0)) %>% 
+    group_by( idp) %>%
+    mutate( outcome_occur_subject_ITT = case_when( any(outcome_occur_record_ITT == 1) ~ 1,
+                                                   TRUE ~ 0)) %>% 
+    ungroup() %>%
+    filter( !(outcome_occur_subject_ITT == 1 & outcome_occur_record_ITT == 0)) %>% 
+    group_by( idp) %>% 
+    mutate( outcome_occur_date_ITT = case_when( outcome_occur_subject_ITT == 1 ~ min(dia_start_date),
+                                                TRUE ~ as.Date("2017-12-31"))) %>% 
+    #==================================================================#
+    # condense
+    #==================================================================#
+    distinct( idp, first_bill_time, outcome_occur_subject_ITT, outcome_occur_date_ITT, departure_date) %>% 
+    mutate( combined_date_ITT = pmin(outcome_occur_date_ITT, departure_date),
+            follow_up_days_ITT  = as.numeric( difftime( combined_date_ITT , first_bill_time, units = "days"))) %>% 
+    ungroup() %>% 
+    select( idp, outcome_occur_subject_ITT, follow_up_days_ITT)
+  end.time <- Sys.time()
+  print(end.time - start.time)
+  return(follow_up_dataset)
+}
+
+follow_up_dataset_ITT_100_specific <- lapply( outcome, Follow_ITT_func) 
+names(follow_up_dataset_ITT_100_specific) <- outcome
+  
+
+
+  
+table(follow_up_dataset_ITT_100_specific$Fractures$outcome_occur_subject_ITT)
+
+
+
+sapply(follow_up_dateset_1, function(x)sum(is.na(x)))
+
+
+save(follow_up_dataset_ATT_100, file="R_datasets/follow_up_dataset_ATT_100.RData")
+save(follow_up_dataset_ITT_100, file="R_datasets/follow_up_dataset_ITT_100.RData")
  
 # Missing data imputation -------------------------------------------------
-baseline_cohort_imputation <- 
+
+summary(baseline_cohort)
+sapply(baseline_cohort, function(x)sum(is.na(x)))
+
+mice_cohort <- 
   baseline_cohort %>% 
-  mutate( BMI_value_impute = case_when( is.na(BMI_value) ~ 24,
-                                        TRUE ~ BMI_value))
+  select(  -Other_or_non_commorbidities) %>% 
+  mice( m = 1, method = 'cart', printFlag = FALSE)
+
+imputation_plot <- densityplot(mice_cohort, ~BMI_value)
+imputation_plot
+baseline_cohort_imputation <- complete(mice_cohort)
+
+trellis.device(device="png", filename="Figures/imputation_plot.png")
+print(imputation_plot)
+dev.off()
+
 
 # Propensity score matching (method 1)-----------------------------------------------
-str(baseline_cohort_imputation)
 
+#==================================================================#
+# # data preparation for PS modelling
+#==================================================================#
 PS_model_dataset <- 
   baseline_cohort_imputation %>% 
   mutate( first_bill_drug = case_when(first_bill_drug == "tramadol" ~ 1,
                                       TRUE ~ 0)) %>% 
-  mutate(sex = factor(sex, levels = c("H", "D")),
+  mutate(sex = as.factor(sex),
          economic_level = as.factor(economic_level),
          rural = as.factor(rural),
          Alzheimer_disease = as.factor(Alzheimer_disease),
@@ -359,50 +522,54 @@ PS_model_dataset <-
          COPD = as.factor( COPD),
          Diabetes = as.factor( Diabetes),
          Parkinson_disease = as.factor( Parkinson_disease),
-         Peripheral_vascular_disease = as.factor( Peripheral_vascular_disease))
+         Peripheral_vascular_disease = as.factor( Peripheral_vascular_disease)) 
 
-names(PS_model_dataset)
+str(PS_model_dataset)
+
+covariates <- setdiff( names(PS_model_dataset), c( "idp", "first_bill_time", "first_bill_drug"))
+dependent_variable <- "first_bill_drug"
+
+# set.seed(1)
+# test_data_sub <- sample_frac(PS_model_dataset, 0.1)
+# str(test_data_sub)
+
+#==================================================================#
+# propensity score modelling
+#==================================================================#
+PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
+                  method = "nearest",
+                  caliper = 0.1,
+                  ratio=1,
+                  data = PS_model_dataset)
+
+# summary(PS_model, standardize=TRUE)
+sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
+sd_data$Observations
+#==================================================================#
+# PS score visualisation
+#==================================================================#
+plot(PS_model, type = 'jitter', interactive = FALSE)
 
 
- 
-set.seed(1)
-test_data_sub <- sample_frac(PS_model_dataset, 0.2)
-str(test_data_sub)
-
-m_out <- matchit(formula=
-                 first_bill_drug ~ 
-                 initiation_age + 
-                 sex +
-                 economic_level + 
-                 rural + 
-                 BMI_value_impute + 
-                 Alzheimer_disease +
-                 Chronic_cough +
-                 Chronic_kidney_disease +
-                 Chronic_liver_disease +
-                 Chronic_musculoskeletal_pain_disorders +
-                 COPD +
-                 Diabetes +
-                 Parkinson_disease +
-                 Peripheral_vascular_disease +
-                 admission_times_10999 +
-                 admission_times_30999,
-                 
-                 method = "nearest",
-                 ratio=1 ,
-                 data = select(PS_model_dataset, -BMI_value))
-
-summary(m_out)
-
+#index for matched rows
 index <- 
-  c(rownames(m_out$match.matrix), m_out$match.matrix) %>% 
-  as.numeric()
+  data.frame(control =  rownames(PS_model$match.matrix), treat = PS_model$match.matrix[,1] ) %>% 
+  filter( !is.na(treat)) %>% 
+  mutate( control = as.character(control), treat = as.character(treat)) %>% 
+  gather( condition, index, control, treat) %>% 
+  mutate( index = as.numeric( index)) %>% 
+  select( index) %>% 
+  unlist()
 
-plot_score_before_matching <- data.frame( first_bill_drug = m_out$model$y, 
-                                         pscore= m_out$model$fitted.values)
+  
 
-plot_score_after_matching <- data.frame( first_bill_drug = m_out$model$y[index], 
-                                         pscore = m_out$model$fitted.values[index])
+
+
+score_before_matching <- data.frame( first_bill_drug = PS_model$model$y, 
+                                         pscore= PS_model$model$fitted.values)
+
+score_after_matching <- data.frame( first_bill_drug = PS_model$model$y[index], 
+                                         pscore = PS_model$model$fitted.values[index])
 
 plot_distribution <- function(dataset){
 
@@ -427,53 +594,44 @@ return(plot)
 
 
 }
+Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
+Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
+Distribution_after_matching
 
-plot_distribution(dataset = plot_score_before_matching)
-plot_distribution(dataset = plot_score_after_matching)
-
-
-plot(m_out, type = 'jitter', interactive = FALSE)
-# 
+#==================================================================#
+# PS mactched cohort
+#==================================================================#
 mathched_cohort <- 
   PS_model_dataset %>% 
   filter( row_number() %in% index)
 
+# Calculate statistics ( mean follow up, rate, crude HR) ------------------------------------------
+cox_dataset_ATT <- 
+  mathched_cohort %>% 
+  left_join(follow_up_dataset_ATT_100, by = "idp")
 
 
-
-
+bb <- 
+  cox_dataset_ATT %>% 
+  group_by( first_bill_drug) %>% 
+  summarise(n = n(), 
+            mean_age = mean( initiation_age), 
+            events = sum( outcome_occur_subject_ATT), 
+            mean_follow = as.numeric( mean(follow_up_days_ATT)/365)) %>% 
+  ungroup() %>% 
+  mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
+  mutate( ratio = rate[2] / rate[1])
 
 
 # Cox-model ---------------------------------------------------------------
-cox_dataset <- 
-  mathched_cohort %>% 
-  left_join(follow_up_dateset, by = "idp")
-
-cox_model <- coxph( Surv(follow_up_time, outcome_occur_subject) ~ 
-                      first_bill_drug +
-                      initiation_age +
-                      sex +
-                      economic_level +
-                      rural +
-                      BMI_value_impute +
-                      Alzheimer_disease +
-                      Chronic_cough +
-                      Chronic_kidney_disease +
-                      Chronic_liver_disease +
-                      Chronic_musculoskeletal_pain_disorders +
-                      COPD +
-                      Diabetes +
-                      Parkinson_disease +
-                      Peripheral_vascular_disease +
-                      admission_times_10999 +
-                      admission_times_30999,
-                      data =  cox_dataset)
+cox_model <- coxph( Surv(follow_up_days_ITT, outcome_occur_subject_ITT) ~ first_bill_drug ,
+                    data =  cox_dataset_ITT)
 summary(cox_model)
 
 set.seed(1)
-cc <- sample_n(bb, 1000, replace = FALSE)
+cc <- sample_n(cox_dataset, 1000, replace = FALSE)
 
-plot_list <- ggadjustedcurves(cox_model, data = cc, method = "average", variable = "first_drug")  
+plot_list <- ggadjustedcurves(cox_model, data = cc, method = "average", variable = "first_bill_drug")  
 plot_data <- plot_list$data
 plot_data$surv <- (1 - (plot_data$surv))
 
@@ -530,6 +688,88 @@ forestplot <- make_forest_plot(cols         = list(resultsA),
                                xlim = c(0.99, 2))
 
 forestplot
+
+
+
+
+
+# Standard difference before and after plot -------------------------------
+sd_plot_dataset <- 
+  sd_data$Balance %>% 
+  select( Type, Diff.Un, Diff.Adj) %>% 
+  tibble::rownames_to_column( var = "variable_names") %>% 
+  filter( variable_names != "distance") %>% 
+  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) %>% 
+  mutate( variable_names = factor( variable_names,
+                                      levels = c( "sex_H",
+                                                  "initiation_age",
+                                                  "economic_level_Ms",
+                                                  "economic_level_U1",
+                                                  "economic_level_U2",
+                                                  "economic_level_U3",
+                                                  "economic_level_U4",
+                                                  "economic_level_U5",
+                                                  "rural_Ms",
+                                                  "rural_R",
+                                                  "rural_U",
+                                                  "BMI_value",
+                                                  "Alzheimer_disease",
+                                                  "Chronic_cough",
+                                                  "Chronic_kidney_disease",
+                                                  "Chronic_liver_disease",
+                                                  "Chronic_musculoskeletal_pain_disorders",
+                                                  "COPD",
+                                                  "Diabetes",
+                                                  "Parkinson_disease",
+                                                  "Peripheral_vascular_disease",
+                                                  "admission_times_10999",
+                                                  "admission_times_30999")))
+
+
+
+sd_plot <- 
+  ggplot( data = sd_plot_dataset ) +
+  geom_point( aes(x = Diff.Un , y = variable_names), shape = 1, size = 2) +
+  geom_point( aes(x = Diff.Adj , y = variable_names, color = "red"), shape = 17, size = 2.5) +
+  geom_vline(xintercept = 0, color = "grey") +
+  geom_vline(xintercept = -10, color = "grey", linetype="longdash", size = 1) +
+  geom_vline(xintercept = 10, color = "grey", linetype="longdash", size = 1) +
+  scale_x_continuous(limits = c( -60, 60),
+                     breaks = seq( -60, 60, 10))+
+  scale_y_discrete(limits = rev(levels(sd_plot_dataset$variable_names))) +
+  
+  labs(x = "\nPercentage standardised difference",
+       y = "Covariates")+
+  
+  theme(
+    text = element_text(family = "Candara", colour = "black"),
+    # panel.border = element_rect(fill=NA),
+    panel.background = element_blank(),
+    panel.grid.major.x = element_blank(),
+    # panel.grid.minor.x = element_blank(),
+    # panel.grid.minor.y = element_line(color = "grey"),
+    # panel.spacing = unit(0.5, "lines"),
+    # plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+    strip.background = element_blank(),
+    # strip.text = element_blank(),
+    
+    axis.line = element_line(),
+    # axis.text.x  = element_text( angle = 45, vjust = 0.5),
+    axis.title.y  = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
+    
+    legend.position = "none") 
+
+ggsave(filename = "sd_plot.png",
+       path = "Figures",
+       plot = sd_plot,
+       width = 5.5,
+       height = 5.5,
+       dpi = 300,
+       type = "cairo")
+
+
+
+
 
 # Save plots --------------------------------------------------------------
 
