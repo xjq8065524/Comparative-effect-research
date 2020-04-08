@@ -489,7 +489,7 @@ summary(baseline_cohort)
 sapply(baseline_cohort, function(x)sum(is.na(x)))
 
 mice_cohort <- 
-  baseline_cohort %>% 
+  baseline_cohort_100 %>% 
   select(  -Other_or_non_commorbidities) %>% 
   mice( m = 1, method = 'cart', printFlag = FALSE)
 
@@ -529,9 +529,9 @@ str(PS_model_dataset)
 covariates <- setdiff( names(PS_model_dataset), c( "idp", "first_bill_time", "first_bill_drug"))
 dependent_variable <- "first_bill_drug"
 
-# set.seed(1)
-# test_data_sub <- sample_frac(PS_model_dataset, 0.1)
-# str(test_data_sub)
+set.seed(1)
+test_data_sub <- sample_frac(PS_model_dataset, 0.2)
+str(test_data_sub)
 
 #==================================================================#
 # propensity score modelling
@@ -540,7 +540,7 @@ PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_v
                   method = "nearest",
                   caliper = 0.1,
                   ratio=1,
-                  data = PS_model_dataset)
+                  data = test_data_sub)
 
 # summary(PS_model, standardize=TRUE)
 sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
@@ -595,6 +595,8 @@ return(plot)
 
 }
 Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
+Distribution_before_matching
+
 Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
 Distribution_after_matching
 
