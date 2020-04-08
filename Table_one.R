@@ -22,6 +22,7 @@ install.packages("finalfit")
 install.packages("rms")
 install.packages("installr") #Updating R/RStudio: https://uvastatlab.github.io/phdplus/installR.html#updateR
 install.packages("table1")
+install.packages("knitr")
 
 
 # memory.limit()
@@ -52,7 +53,7 @@ library(extrafont) #font
 # library(gridExtra)  #masking  'package:dplyr'  combine
 library(rms)
 library(table1)
-
+library(knitr)
 getwd()
 setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety/R codes/Comparative-effect-research")
 # load raw and label datasets -------------------------------------------------------
@@ -70,47 +71,16 @@ Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.x
 Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
 
 #derived datasets
-load("R_datasets/stage_two_saved_data.RData")
-# Baseline table one ----------------------------------------------------------
+load("R_datasets/baseline_cohort.RData")
+# Baseline table one (method 1)----------------------------------------------------------
 # data preparation including label, unit, format etc.
 
 #first check the missing value of each variable
-sapply(stage_three_saved_data, function(x)sum(is.na(x)))
+sapply(baseline_cohort, function(x)sum(is.na(x)))
 
 
-
-table_stage_three_saved_data <- 
-  stage_three_saved_data %>% 
-  mutate( first_drug = factor( first_drug, 
-                               levels=c("tramadol","celecoxib"),
-                               labels=c("Tramadol", "Celecoxib"))) %>% 
-  mutate( sex = factor( sex, 
-                        levels=c("H","D"),
-                        labels=c("Male", "Female"))) %>% 
-  mutate( economic_level = factor( economic_level, 
-                           levels=c("U1", "U2", "U3", "U4", "U5"),
-                           labels=c("U1", "U2", "U3", "U4", "U5"))) %>% 
-  mutate( rural = factor( rural, 
-                          levels=c("R", "U"),
-                          labels=c("Rural", "Urban"))) %>% 
-  rename( Alzheimer_disease = "Alzheimer disease") %>% 
-  mutate( Alzheimer_disease = factor( Alzheimer_disease, 
-                          levels=c(1),
-                          labels=c("Yes"))) %>% 
-  rename( Cancer = "Cancer") %>% 
-  mutate( Cancer = factor( Cancer, 
-                          levels=c(1),
-                          labels=c("Yes")))
-
+str(table_baseline_cohort) 
   
-  
-
-table1(~ initiation_age + 
-         sex + 
-         economic_level + 
-         rural | first_drug, data = table_stage_three_saved_data)
-
-
 
 labels <- list(
   variables=list(initiation_age=" Age (years)",
@@ -118,12 +88,22 @@ labels <- list(
                  economic_level= "Socioeconomic deprivation",
                  rural= "Residence area",
                  BMI_value= "BMI",
+                 Diabetes = "Diabetes" ,
+                 Peripheral_vascular_disease = "Peripheral_vascular_disease",
+                 COPD = "COPD", 
+                 Chronic_cough = "Chronic_cough",
+                 Chronic_kidney_disease = " kidney_disease" ,
+                 Chronic_liver_disease = "liver_disease",
+                 Chronic_musculoskeletal_pain_disorders = "musculoskeletal_pain_disorders" ,
+                 Parkinson_disease = "Parkinson_disease",
                  Alzheimer_disease = "Alzheimer_disease",
-                 Cancer = "Cancer"),
+                
+                 admission_times_10999 = "GP visit",
+                 admission_times_30999 = "hospital visit"),
   groups=list("", ""))
 
 
-strata <- c( split(table_stage_three_saved_data, table_stage_three_saved_data$first_drug))
+strata <- c( split(table_baseline_cohort, table_baseline_cohort$first_bill_drug))
 
 my.render.cont <- function(x) {
   with(stats.apply.rounding(stats.default(x), digits=2), c("", "Mean (SD) "= sprintf("%s (&plusmn; %s)", MEAN, SD)))
@@ -142,5 +122,42 @@ table1(strata, labels, groupspan=c( 1, 1),
 
 
 
+
+
+
+# Baseline table one (method 2) -------------------------------------------
+library(tableone)
+
+str(table_baseline_cohort) 
+
+table_baseline_cohort_fentanyl <- 
+  baseline_cohort_imputation_fentanyl %>% 
+  select( -idp, -first_bill_time) %>% 
+  mutate( first_bill_drug = factor( first_bill_drug, levels = c( "tramadol", "fentanyl")),
+          sex = factor(sex, levels = c("H", "D")),
+          Alzheimer_disease = as.factor(Alzheimer_disease),
+          Chronic_cough = as.factor( Chronic_cough),
+          Chronic_kidney_disease = as.factor( Chronic_kidney_disease),
+          Chronic_liver_disease = as.factor( Chronic_liver_disease),
+          Chronic_musculoskeletal_pain_disorders = as.factor( Chronic_musculoskeletal_pain_disorders),
+          COPD = as.factor( COPD),
+          Diabetes = as.factor( Diabetes),
+          Parkinson_disease = as.factor( Parkinson_disease),
+          Peripheral_vascular_disease = as.factor( Peripheral_vascular_disease))
+
+vars <- c("initiation_age","sex", "economic_level", "rural",
+          "BMI_value", 
+          "Diabetes", "Peripheral_vascular_disease", "COPD", "Chronic_cough", "Chronic_kidney_disease", "Chronic_liver_disease", "Chronic_musculoskeletal_pain_disorders", "Parkinson_disease", "Alzheimer_disease",
+          "admission_times_10999", "admission_times_30999")
+
+
+table_unmatched <- CreateTableOne(vars = vars, strata = "first_bill_drug", data = table_baseline_cohort_fentanyl, test = FALSE)
+print_out <- print(table_unmatched, smd = TRUE, noSpaces = TRUE)
+
+
+
+
+table_matched <- CreateTableOne(vars = vars, strata = "first_bill_drug", data = mathched_cohort, test = FALSE)
+print_out <- print(table_matched, smd = TRUE, quote = TRUE, noSpaces = TRUE)
 
 

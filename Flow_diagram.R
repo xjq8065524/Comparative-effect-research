@@ -95,7 +95,6 @@ Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidi
 # set.seed(1)
 # baseline_cohort <- sample_frac(baseline_cohort_100, 0.1)
 
-
 # Little explore with raw dta ---------------------------------------------
 head(billing)
 str(billing)
@@ -120,18 +119,18 @@ BMI_dataset <-
   select(-clinical_cod)
 
 # database population -----------------------------------------------------
-set.seed(1)
-sub_Denominator <- sample_frac(Denominator_data, 0.1)
+# set.seed(1)
+# sub_Denominator <- sample_frac(Denominator_data, 0.1)
 #=======================================================#
 # all registered subjects with billing data after 2007
 #=======================================================#
-database_population <- 
-  Denominator_data %>% 
+database_population_fentanyl <- 
+    Denominator_data %>% 
     select( idp) %>% 
     left_join( select( billing, -billing_agr), by = "idp") %>% 
     left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
     # filter studied drugs and observation period
-    filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+    filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "fentanyl"), bill_date >= as.Date("2007-01-01")) %>% 
     group_by( idp) %>% 
     arrange( bill_date) %>% 
     mutate( seq = row_number(), total_seq = n()) %>% # create two index
@@ -144,26 +143,26 @@ database_population <-
     filter( seq == 1) %>% 
     ungroup()  
 
-nrow(database_population)
+nrow(database_population_fentanyl)
 
 #==================================================================#
 # generate population with study durg during the look-back period 
 #==================================================================#
-look_back_population <- 
-  database_population %>% 
+look_back_population_fentanyl <- 
+  database_population_fentanyl %>% 
   select( idp, first_bill_time) %>% 
   left_join( select( billing, -billing_agr), by = "idp") %>% 
   left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
-  filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "codeine")) %>% 
+  filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "fentanyl")) %>% 
   mutate( look_back_date = first_bill_time - 365) %>% 
   filter( bill_date >= look_back_date, bill_date < first_bill_time) %>% 
   distinct( idp) %>% 
   mutate( look_back_index = 1)
 
 
-database_population <- 
-  database_population %>% 
-  left_join( look_back_population, by = "idp") %>% 
+database_population_fentanyl <- 
+  database_population_fentanyl %>% 
+  left_join( look_back_population_fentanyl, by = "idp") %>% 
   mutate( look_back_index = case_when( look_back_index == 1 ~ 1,
                                        TRUE ~ 0))
 
@@ -173,8 +172,8 @@ database_population <-
 #==================================================================#
 # Aged >= 18 years old on the date of first dispensation (entry date) of studied drugs 
 #==================================================================#
-study_population_stage1 <- 
-  database_population %>% 
+study_population_stage1_fentanyl <- 
+  database_population_fentanyl %>% 
   left_join( demography, by = "idp") %>% 
   #important: check if there are missing values for demographics variables
   # sapply(function(x)sum(is.na(x)))
@@ -187,8 +186,8 @@ study_population_stage1 <-
 #==================================================================#
 # No cancer previous or at the time of the entry date
 #==================================================================#
-study_population_stage2 <- 
-  study_population_stage1 %>% 
+study_population_stage2_fentanyl <- 
+  study_population_stage1_fentanyl %>% 
   left_join( select(check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>% 
   left_join( Dic_history_cancer, by = "dia_cod") %>% 
   left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
@@ -206,10 +205,7 @@ study_population_stage2 <-
   select( -dia_cod, -dia_start_date, -cancer_label, -Disease_Group, -Disease_Specific ) %>% 
   ungroup()
 
-
-
-
-nrow(study_population_stage2)
+nrow(study_population_stage2_fentanyl)
 
 
 
@@ -217,49 +213,49 @@ nrow(study_population_stage2)
 #==================================================================#
 # Continuous enrolment in the database < 1 year before the entry date 
 #==================================================================#
-Final_cohort_stage1 <- 
-  study_population_stage2 %>% 
+Final_cohort_stage1_fentanyl <- 
+  study_population_stage2_fentanyl %>% 
   filter( initiation_gap >= 1)
 
-nrow(study_population_stage2) - nrow(Final_cohort_stage1) 
+nrow(study_population_stage2_fentanyl) - nrow(Final_cohort_stage1_fentanyl) 
 
 #==================================================================#
 # withou dispensation one year before index date
 #==================================================================#
-Final_cohort_stage2 <- 
-  Final_cohort_stage1 %>% 
+Final_cohort_stage2_fentanyl <- 
+  Final_cohort_stage1_fentanyl %>% 
   filter(  look_back_index == 0) 
 
-nrow(Final_cohort_stage1) - nrow(Final_cohort_stage2) 
+nrow(Final_cohort_stage1_fentanyl) - nrow(Final_cohort_stage2_fentanyl) 
 
 
 #==================================================================#
 # Dispensed both tramadol and codeine on the entry date 
 #==================================================================#
-Final_cohort_stage3 <- 
-  Final_cohort_stage2 %>% 
+Final_cohort_stage3_fentanyl <- 
+  Final_cohort_stage2_fentanyl %>% 
   filter( index_double_user == 0) 
 
-nrow(Final_cohort_stage2) - nrow(Final_cohort_stage3) 
+nrow(Final_cohort_stage2_fentanyl) - nrow(Final_cohort_stage3_fentanyl) 
 #==================================================================#
 # No outcomes of interest previous or at the time of the entry date
 #==================================================================#
-Final_cohort_100 <- 
-  Final_cohort_stage3 %>% 
+Final_cohort_100_fentanyl <- 
+  Final_cohort_stage3_fentanyl %>% 
   filter( history_outcomes == 0) 
 
-nrow(Final_cohort_stage3) - nrow(Final_cohort_100) 
-nrow(Final_cohort_100) 
+nrow(Final_cohort_stage3_fentanyl) - nrow(Final_cohort_100_fentanyl) 
+nrow(Final_cohort_100_fentanyl) 
 
-table( Final_cohort_100$index_double_user)
+table( Final_cohort_100_fentanyl$first_bill_drug)
 
-save(Final_cohort_100, file="R_datasets/Final_cohort_100.RData")
+save(Final_cohort_100_fentanyl, file="R_datasets/Final_cohort_100_fentanyl.RData")
 
 
 
 # Link to other baseline variables ----------------------------------------
-baseline_cohort_100 <- 
-  Final_cohort %>% 
+baseline_cohort_100_fentanyl <- 
+  Final_cohort_100_fentanyl %>% 
   left_join( social_variables, by = "idp") %>%
   left_join( BMI_dataset, by = "idp") %>%
   
@@ -351,8 +347,7 @@ baseline_cohort_100 <-
   
 
   
-save(baseline_cohort_100, file="R_datasets/baseline_cohort_100.RData")
-
+save(baseline_cohort_100_fentanyl, file="R_datasets/baseline_cohort_100_fentanyl.RData")
 
 
 
@@ -429,14 +424,14 @@ end.time - start.time
 
 
 
-outcome <- Dic_CER_adverse_events %>% distinct( Disease_Group) %>% unlist() %>% unname()
-outcome
+outcome_list <- Dic_CER_adverse_events %>% distinct( Disease_Group) %>% unlist() %>% unname()
+outcome_list
 
 
 Follow_ITT_func <- function(outcomes){
   start.time <- Sys.time()
   follow_up_dataset <- 
-    baseline_cohort_100 %>% 
+    baseline_cohort_100_fentanyl %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
@@ -467,39 +462,41 @@ Follow_ITT_func <- function(outcomes){
   return(follow_up_dataset)
 }
 
-follow_up_dataset_ITT_100_specific <- lapply( outcome, Follow_ITT_func) 
-names(follow_up_dataset_ITT_100_specific) <- outcome
-  
+follow_up_dataset_ITT_100_fentanyl <- Follow_ITT_func( outcomes = outcome_list)
+# 
+# follow_up_dataset_ITT_100_specific <- lapply( outcome, Follow_ITT_func) 
+# names(follow_up_dataset_ITT_100_specific) <- outcome
+#   
 
 
   
-table(follow_up_dataset_ITT_100_specific$Fractures$outcome_occur_subject_ITT)
+table(follow_up_dataset_ITT_100_fentanyl$outcome_occur_subject_ITT)
 
 
-
-sapply(follow_up_dateset_1, function(x)sum(is.na(x)))
-
-
-save(follow_up_dataset_ATT_100, file="R_datasets/follow_up_dataset_ATT_100.RData")
-save(follow_up_dataset_ITT_100, file="R_datasets/follow_up_dataset_ITT_100.RData")
+# 
+# sapply(follow_up_dateset_1, function(x)sum(is.na(x)))
+# save(follow_up_dataset_ATT_100, file="R_datasets/follow_up_dataset_ATT_100.RData")
+# save(follow_up_dataset_ITT_100, file="R_datasets/follow_up_dataset_ITT_100.RData")
  
 # Missing data imputation -------------------------------------------------
 
-summary(baseline_cohort)
-sapply(baseline_cohort, function(x)sum(is.na(x)))
+summary(baseline_cohort_100_fentanyl)
+sapply(baseline_cohort_100_fentanyl, function(x)sum(is.na(x)))
 
-mice_cohort <- 
-  baseline_cohort %>% 
+mice_cohort_fentanyl <- 
+  baseline_cohort_100_fentanyl %>% 
   select(  -Other_or_non_commorbidities) %>% 
   mice( m = 1, method = 'cart', printFlag = FALSE)
 
-imputation_plot <- densityplot(mice_cohort, ~BMI_value)
+imputation_plot <- densityplot(mice_cohort_fentanyl, ~BMI_value)
 imputation_plot
-baseline_cohort_imputation <- complete(mice_cohort)
+baseline_cohort_imputation_fentanyl <- complete(mice_cohort_fentanyl)
 
-trellis.device(device="png", filename="Figures/imputation_plot.png")
-print(imputation_plot)
-dev.off()
+save(baseline_cohort_imputation_fentanyl, file="R_datasets/baseline_cohort_imputation_fentanyl.RData")
+
+# trellis.device(device="png", filename="Figures/imputation_plot.png")
+# print(imputation_plot)
+# dev.off()
 
 
 # Propensity score matching (method 1)-----------------------------------------------
@@ -529,22 +526,61 @@ str(PS_model_dataset)
 covariates <- setdiff( names(PS_model_dataset), c( "idp", "first_bill_time", "first_bill_drug"))
 dependent_variable <- "first_bill_drug"
 
-# set.seed(1)
-# test_data_sub <- sample_frac(PS_model_dataset, 0.1)
-# str(test_data_sub)
+
+mylogit <- glm( reformulate(termlabels = covariates, response = dependent_variable), 
+                data = PS_model_dataset, 
+                family = "binomial")
+
+score_before_matching <- data.frame( first_bill_drug = mylogit$y, 
+                                     pscore= mylogit$fitted.values)
+
+plot_distribution <- function(dataset){
+  
+  plot <- 
+    ggplot( ) +
+    scale_x_continuous( limits = c( 0, 1), breaks = seq( 0, 1, 0.2)) +
+    scale_y_continuous( limits = c( -5, 5), breaks = seq( -5, 5, 2.5)) +
+    # Top
+    geom_density( data = filter( dataset, first_bill_drug == 1),  aes(x = pscore, y = ..density..),  fill="#69b3a2" ) +
+    geom_label( aes(x= 0.6, y= 2.5, label="Tramadol cohort"), color="#69b3a2") +
+    # Bottom
+    geom_density( data = filter( dataset, first_bill_drug == 0),  aes(x = pscore, y = -..density..), fill= "#404080") +
+    geom_label( aes(x= 0.6, y= -2.5, label="Codeine cohort"), color="#404080") +
+    
+    labs( x = "Score",
+          y = "Density") +
+    
+    theme_ipsum() +
+    theme(aspect.ratio = 0.66)
+  
+  return(plot)
+  
+  
+}
+plot_distribution(dataset = score_before_matching)
+
+
+
+set.seed(1)
+test_data_sub <- sample_frac(PS_model_dataset, 0.2)
+str(test_data_sub)
 
 #==================================================================#
 # propensity score modelling
 #==================================================================#
-PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
-                  method = "nearest",
-                  caliper = 0.1,
-                  ratio=1,
-                  data = PS_model_dataset)
+PS_model_mahalanobis_fentanyl <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
+                              # m.order = "smallest",
+                              method = "nearest",
+                              distance = "mahalanobis",
+                              # caliper = 0.2,
+                              ratio=1,
+                              data = PS_model_dataset)
+PS_model_unweight_fentanyl <- PS_model
+save(PS_model_unweight_fentanyl, file="R_datasets/PS_model_unweight_fentanyl.RData")
 
 # summary(PS_model, standardize=TRUE)
-sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
-sd_data$Observations
+sd_data <- bal.tab(PS_model_mahalanobis_fentanyl, binary = "std", un = TRUE)
+sd_data
 #==================================================================#
 # PS score visualisation
 #==================================================================#
@@ -595,6 +631,8 @@ return(plot)
 
 }
 Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
+Distribution_before_matching
+
 Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
 Distribution_after_matching
 
@@ -602,22 +640,22 @@ Distribution_after_matching
 # PS mactched cohort
 #==================================================================#
 mathched_cohort <- 
-  PS_model_dataset %>% 
+  PS_model_dataset%>% 
   filter( row_number() %in% index)
 
 # Calculate statistics ( mean follow up, rate, crude HR) ------------------------------------------
-cox_dataset_ATT <- 
+cox_dataset_ITT <- 
   mathched_cohort %>% 
-  left_join(follow_up_dataset_ATT_100, by = "idp")
+  left_join(follow_up_dataset_ITT_100_fentanyl, by = "idp")
 
 
 bb <- 
-  cox_dataset_ATT %>% 
+  cox_dataset_ITT %>% 
   group_by( first_bill_drug) %>% 
   summarise(n = n(), 
             mean_age = mean( initiation_age), 
-            events = sum( outcome_occur_subject_ATT), 
-            mean_follow = as.numeric( mean(follow_up_days_ATT)/365)) %>% 
+            events = sum( outcome_occur_subject_ITT), 
+            mean_follow = as.numeric( mean(follow_up_days_ITT)/365)) %>% 
   ungroup() %>% 
   mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
   mutate( ratio = rate[2] / rate[1])
