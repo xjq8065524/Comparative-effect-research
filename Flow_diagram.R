@@ -91,9 +91,10 @@ Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidi
 #prepared datasets
 # load("R_datasets/baseline_cohort_100.RData")
 # load("R_datasets/follow_up_dateset.RData")
+# load("R_datasets/Final_cohort_100.RData")
 
-# set.seed(1)
-# baseline_cohort <- sample_frac(baseline_cohort_100, 0.1)
+set.seed(1)
+Final_cohort <- sample_frac(Final_cohort_100, 0.1)
 
 
 # Little explore with raw dta ---------------------------------------------
@@ -126,7 +127,7 @@ sub_Denominator <- sample_frac(Denominator_data, 0.1)
 # all registered subjects with billing data after 2007
 #=======================================================#
 database_population <- 
-  Denominator_data %>% 
+    sub_Denominator %>% 
     select( idp) %>% 
     left_join( select( billing, -billing_agr), by = "idp") %>% 
     left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
