@@ -530,6 +530,8 @@ dependent_variable <- "first_bill_drug"
 mylogit <- glm( reformulate(termlabels = covariates, response = dependent_variable), 
                 data = PS_model_dataset, 
                 family = "binomial")
+summary(mylogit)
+
 
 score_before_matching <- data.frame( first_bill_drug = mylogit$y, 
                                      pscore= mylogit$fitted.values)
@@ -538,17 +540,17 @@ plot_distribution <- function(dataset){
   
   plot <- 
     ggplot( ) +
-    scale_x_continuous( limits = c( 0, 1), breaks = seq( 0, 1, 0.2)) +
-    scale_y_continuous( limits = c( -5, 5), breaks = seq( -5, 5, 2.5)) +
+    # scale_x_continuous( limits = c( 0, 1.5), breaks = seq( 0, 1, 0.2)) +
+    # scale_y_continuous( limits = c( -20, 20), breaks = seq( -5, 5, 2.5)) +
     # Top
-    geom_density( data = filter( dataset, first_bill_drug == 1),  aes(x = pscore, y = ..density..),  fill="#69b3a2" ) +
+    geom_histogram( data = filter( dataset, first_bill_drug == 1),  aes(x = pscore, y = ..density..),  fill="#69b3a2" ,bins = 100) +
     geom_label( aes(x= 0.6, y= 2.5, label="Tramadol cohort"), color="#69b3a2") +
     # Bottom
-    geom_density( data = filter( dataset, first_bill_drug == 0),  aes(x = pscore, y = -..density..), fill= "#404080") +
-    geom_label( aes(x= 0.6, y= -2.5, label="Codeine cohort"), color="#404080") +
+    geom_histogram( data = filter( dataset, first_bill_drug == 0),  aes(x = pscore, y = -..density..), fill= "#404080", bins = 100) +
+    geom_label( aes(x= 0.6, y= -2.5, label="Fentanyl cohort"), color="#404080") +
     
     labs( x = "Score",
-          y = "Density") +
+          y = "Frequency") +
     
     theme_ipsum() +
     theme(aspect.ratio = 0.66)
@@ -557,9 +559,9 @@ plot_distribution <- function(dataset){
   
   
 }
-plot_distribution(dataset = score_before_matching)
-
-
+Distribution_before_matching_fentanyl <- plot_distribution(dataset = score_before_matching)
+Distribution_after_matching_fentanyl <- plot_distribution(dataset = score_after_matching)
+Distribution_after_matching_fentanyl
 
 set.seed(1)
 test_data_sub <- sample_frac(PS_model_dataset, 0.2)
@@ -599,39 +601,13 @@ index <-
 
   
 
-
-
 score_before_matching <- data.frame( first_bill_drug = PS_model$model$y, 
                                          pscore= PS_model$model$fitted.values)
 
 score_after_matching <- data.frame( first_bill_drug = PS_model$model$y[index], 
                                          pscore = PS_model$model$fitted.values[index])
 
-plot_distribution <- function(dataset){
 
-plot <- 
-  ggplot( ) +
-  scale_x_continuous( limits = c( 0, 1), breaks = seq( 0, 1, 0.2)) +
-  scale_y_continuous( limits = c( -5, 5), breaks = seq( -5, 5, 2.5)) +
-  # Top
-  geom_density( data = filter( dataset, first_bill_drug == 1),  aes(x = pscore, y = ..density..),  fill="#69b3a2" ) +
-  geom_label( aes(x= 0.6, y= 2.5, label="Tramadol cohort"), color="#69b3a2") +
-  # Bottom
-  geom_density( data = filter( dataset, first_bill_drug == 0),  aes(x = pscore, y = -..density..), fill= "#404080") +
-  geom_label( aes(x= 0.6, y= -2.5, label="Codeine cohort"), color="#404080") +
-  
-  labs( x = "Score",
-        y = "Density") +
-  
-  theme_ipsum() +
-  theme(aspect.ratio = 0.66)
-
-return(plot)
-
-
-}
-Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
-Distribution_before_matching
 
 Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
 Distribution_after_matching
@@ -772,8 +748,8 @@ sd_plot <-
   geom_vline(xintercept = 0, color = "grey") +
   geom_vline(xintercept = -10, color = "grey", linetype="longdash", size = 1) +
   geom_vline(xintercept = 10, color = "grey", linetype="longdash", size = 1) +
-  scale_x_continuous(limits = c( -60, 60),
-                     breaks = seq( -60, 60, 10))+
+  scale_x_continuous(limits = c( -100, 30),
+                     breaks = seq( -100, 30, 10))+
   scale_y_discrete(limits = rev(levels(sd_plot_dataset$variable_names))) +
   
   labs(x = "\nPercentage standardised difference",
@@ -796,8 +772,9 @@ sd_plot <-
     axis.title.y  = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
     
     legend.position = "none") 
+sd_plot
 
-ggsave(filename = "sd_plot.png",
+ggsave(filename = "sd_plot_fentanyl.png",
        path = "Figures",
        plot = sd_plot,
        width = 5.5,
@@ -811,17 +788,17 @@ ggsave(filename = "sd_plot.png",
 
 # Save plots --------------------------------------------------------------
 
-ggsave(filename = "Distribution_before_matching.png",
+ggsave(filename = "Distribution_before_matching_fentanyl.png",
        path = "Figures",
-       plot = Distribution_before_matching,
+       plot = Distribution_before_matching_fentanyl,
        width = 8,
        height = 6,
        dpi = 300,
        type = "cairo")
 
-ggsave(filename = "Distribution_after_matching.png",
+ggsave(filename = "Distribution_after_matching_fentanyl.png",
        path = "Figures",
-       plot = Distribution_after_matching,
+       plot = Distribution_after_matching_fentanyl,
        width = 8,
        height = 6,
        dpi = 300,
@@ -830,3 +807,5 @@ ggsave(filename = "Distribution_after_matching.png",
 
 
 
+
+#
