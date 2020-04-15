@@ -82,11 +82,16 @@ Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_pob
                                col_names = TRUE)
 
 #dictionary datasets
-Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.xlsx")
-Dic_history_cancer <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_cancer.xlsx")
-Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
-Dic_history_medication <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_medication.xlsx")
-Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
+catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xlsx") %>% filter( agr != "CCI")
+
+
+
+# #dictionary datasets
+# Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.xlsx")
+# Dic_history_cancer <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_cancer.xlsx")
+# Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
+# Dic_history_medication <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_medication.xlsx")
+# Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
 
 #prepared datasets
 # load("R_datasets/baseline_cohort_100.RData")
@@ -125,14 +130,14 @@ sub_Denominator <- sample_frac(Denominator_data, 0.01)
 #=======================================================#
 # all registered subjects with billing data after 2007
 #=======================================================#
-database_population_codeine <- 
+database_population_fentanyl <- 
   Denominator_data %>% 
   select( idp) %>% 
   left_join( select( billing, -billing_agr), by = "idp") %>% 
   left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
   rename( Drug_name = English_label) %>% 
   # filter studied drugs and observation period
-  filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+  filter(  Drug_name %in% c("tramadol", "fentanyl"), bill_date >= as.Date("2007-01-01")) %>% 
   group_by( idp) %>% 
   arrange( bill_date) %>% 
   mutate( seq = row_number(), total_seq = n()) %>% # create two index
@@ -145,27 +150,27 @@ database_population_codeine <-
   filter( seq == 1) %>% 
   ungroup()  
 
-nrow(database_population_codeine)
+nrow(database_population_fentanyl)
 
 #==================================================================#
 # generate population with study durg during the look-back period 
 #==================================================================#
-look_back_population_codeine <- 
-  database_population_codeine %>% 
+look_back_population_fentanyl <- 
+  database_population_fentanyl %>% 
   select( idp, first_bill_time) %>% 
   left_join( select( billing, -billing_agr), by = "idp") %>% 
   left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
   rename( Drug_name = English_label) %>% 
-  filter( Drug_name %in% c("tramadol", "codeine")) %>% 
+  filter( Drug_name %in% c("tramadol", "fentanyl")) %>% 
   mutate( look_back_date = first_bill_time - 365) %>% 
   filter( bill_date >= look_back_date, bill_date < first_bill_time) %>% 
   distinct( idp) %>% 
   mutate( look_back_index = 1)
 
 
-database_population_codeine <- 
-  database_population_codeine %>% 
-  left_join( look_back_population_codeine, by = "idp") %>% 
+database_population_fentanyl <- 
+  database_population_fentanyl %>% 
+  left_join( look_back_population_fentanyl, by = "idp") %>% 
   mutate( look_back_index = case_when( look_back_index == 1 ~ 1,
                                        TRUE ~ 0))
 
@@ -175,8 +180,8 @@ database_population_codeine <-
 #==================================================================#
 # Aged >= 18 years old on the date of first dispensation (entry date) of studied drugs 
 #==================================================================#
-study_population_stage1_codeine <- 
-  database_population_codeine %>% 
+study_population_stage1_fentanyl <- 
+  database_population_fentanyl %>% 
   left_join( demography, by = "idp") %>% 
   #important: check if there are missing values for demographics variables
   # sapply(function(x)sum(is.na(x)))
@@ -189,8 +194,8 @@ study_population_stage1_codeine <-
 #==================================================================#
 # No cancer previous or at the time of the entry date
 #==================================================================#
-study_population_stage2_codeine <- 
-  study_population_stage1_codeine %>% 
+study_population_stage2_fentanyl <- 
+  study_population_stage1_fentanyl %>% 
   left_join( select(check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp")  %>% 
   left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
   rename( disease_name = English_label, disease_group = variable_group) %>% 
@@ -211,14 +216,14 @@ study_population_stage2_codeine <-
 
 
 
-nrow(study_population_stage2_codeine)
+nrow(study_population_stage2_fentanyl)
 
 
 
 # Finial cohort -----------------------------------------------------------
 
-Final_cohort_codeine_100 <- 
-  study_population_stage2_codeine %>% 
+Final_cohort_fentanyl_100 <- 
+  study_population_stage2_fentanyl %>% 
   #==================================================================#
   # Continuous enrolment in the database < 1 year before the entry date 
   #==================================================================#
@@ -228,7 +233,7 @@ Final_cohort_codeine_100 <-
   #==================================================================#
   filter(  look_back_index == 0) %>% 
   #==================================================================#
-  # Dispensed both tramadol and codeine on the entry date 
+  # Dispensed both tramadol and fentanyl on the entry date 
   #==================================================================#
   filter( index_double_user == 0) %>% 
   #==================================================================#
@@ -238,14 +243,16 @@ Final_cohort_codeine_100 <-
 
 
 Exclusion_summary <- 
-  study_population_stage2_codeine %>% 
+  study_population_stage2_fentanyl %>% 
   summarise( not_continuous_enrol = sum(initiation_gap < 1),
              with_prior_dispensation = sum(look_back_index == 1),
              double_user = sum(index_double_user == 1),
              with_outcome = sum(history_outcomes == 1))
 
 
-save(Final_cohort_codeine_100, file="R_datasets/Final_cohort_codeine_100.RData")
+save(Final_cohort_fentanyl_100, file="R_datasets/Final_cohort_fentanyl_100.RData")
+
+table(Final_cohort_fentanyl_100$first_bill_drug)
 
 # set.seed(1)
 # Final_cohort_codeine <- sample_frac(Final_cohort_codeine_100, 0.1)
@@ -254,8 +261,8 @@ save(Final_cohort_codeine_100, file="R_datasets/Final_cohort_codeine_100.RData")
 
 
 # Link to other baseline variables ----------------------------------------
-baseline_cohort_codeine_100 <- 
-  Final_cohort_codeine_100 %>% 
+baseline_cohort_fentanyl_100 <- 
+  Final_cohort_fentanyl_100 %>% 
   left_join( social_variables, by = "idp") %>%
   left_join( BMI_dataset, by = "idp") %>%
   # 
@@ -360,7 +367,7 @@ baseline_cohort_codeine_100 <-
   # transform from long to wide data
   spread(commorbidity_label, commorbidities_index_records, fill = 0)
 
-save(baseline_cohort_codeine_100, file="R_datasets/baseline_cohort_codeine_100.RData")
+save(baseline_cohort_fentanyl_100, file="R_datasets/baseline_cohort_fentanyl_100.RData")
 
 
 
@@ -622,24 +629,19 @@ sapply(follow_up_dateset_1, function(x)sum(is.na(x)))
 
 # Missing data imputation -------------------------------------------------
 
-summary(baseline_cohort_100_fentanyl)
-sapply(baseline_cohort_100_fentanyl, function(x)sum(is.na(x)))
+summary(baseline_cohort_fentanyl_100)
+sapply(baseline_cohort_fentanyl_100, function(x)sum(is.na(x)))
 
-<<<<<<< HEAD
-mice_cohort_fentanyl <- 
-  baseline_cohort_100_fentanyl %>% 
-=======
 mice_cohort <- 
-  baseline_cohort_100 %>% 
->>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
+  baseline_cohort_fentanyl_100 %>% 
   select(  -Other_or_non_commorbidities) %>% 
   mice( m = 1, method = 'cart', printFlag = FALSE)
 
-imputation_plot <- densityplot(mice_cohort_fentanyl, ~BMI_value)
+imputation_plot <- densityplot(mice_cohort, ~BMI_value)
 imputation_plot
-baseline_cohort_imputation_fentanyl <- complete(mice_cohort_fentanyl)
 
-save(baseline_cohort_imputation_fentanyl, file="R_datasets/baseline_cohort_imputation_fentanyl.RData")
+baseline_cohort_fentanyl_100_imputation <- complete(mice_cohort)
+save(baseline_cohort_fentanyl_100_imputation, file="R_datasets/baseline_cohort_fentanyl_100_imputation.RData")
 
 # trellis.device(device="png", filename="Figures/imputation_plot.png")
 # print(imputation_plot)
@@ -652,28 +654,16 @@ save(baseline_cohort_imputation_fentanyl, file="R_datasets/baseline_cohort_imput
 # # data preparation for PS modelling
 #==================================================================#
 PS_model_dataset <- 
-  baseline_cohort_imputation %>% 
+  baseline_cohort_fentanyl_100_imputation %>% 
   mutate( first_bill_drug = case_when(first_bill_drug == "tramadol" ~ 1,
-                                      TRUE ~ 0)) %>% 
-  mutate(sex = as.factor(sex),
-         economic_level = as.factor(economic_level),
-         rural = as.factor(rural),
-         Alzheimer_disease = as.factor(Alzheimer_disease),
-         Chronic_cough = as.factor( Chronic_cough),
-         Chronic_kidney_disease = as.factor( Chronic_kidney_disease),
-         Chronic_liver_disease = as.factor( Chronic_liver_disease),
-         Chronic_musculoskeletal_pain_disorders = as.factor( Chronic_musculoskeletal_pain_disorders),
-         COPD = as.factor( COPD),
-         Diabetes = as.factor( Diabetes),
-         Parkinson_disease = as.factor( Parkinson_disease),
-         Peripheral_vascular_disease = as.factor( Peripheral_vascular_disease)) 
-
+                                      TRUE ~ 0)) 
+factor_list <- setdiff( names(PS_model_dataset), c("idp", "first_bill_time", "first_bill_drug", "initiation_age", "BMI_value", "admission_times_10999", "admission_times_30999"))
+PS_model_dataset[factor_list] <- lapply( PS_model_dataset[factor_list], factor)
 str(PS_model_dataset)
 
 covariates <- setdiff( names(PS_model_dataset), c( "idp", "first_bill_time", "first_bill_drug"))
 dependent_variable <- "first_bill_drug"
 
-<<<<<<< HEAD
 
 mylogit <- glm( reformulate(termlabels = covariates, response = dependent_variable), 
                 data = PS_model_dataset, 
@@ -708,11 +698,11 @@ plot_distribution <- function(dataset){
   
 }
 Distribution_before_matching_fentanyl <- plot_distribution(dataset = score_before_matching)
-Distribution_after_matching_fentanyl <- plot_distribution(dataset = score_after_matching)
-Distribution_after_matching_fentanyl
+Distribution_before_matching_fentanyl
 
-=======
->>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
+table(baseline_cohort_fentanyl_100_imputation$first_bill_drug)
+
+
 set.seed(1)
 test_data_sub <- sample_frac(PS_model_dataset, 0.2)
 str(test_data_sub)
@@ -720,26 +710,14 @@ str(test_data_sub)
 #==================================================================#
 # propensity score modelling
 #==================================================================#
-<<<<<<< HEAD
-PS_model_mahalanobis_fentanyl <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
-                              # m.order = "smallest",
-                              method = "nearest",
-                              distance = "mahalanobis",
-                              # caliper = 0.2,
-                              ratio=1,
-                              data = PS_model_dataset)
-PS_model_unweight_fentanyl <- PS_model
-save(PS_model_unweight_fentanyl, file="R_datasets/PS_model_unweight_fentanyl.RData")
-=======
 PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
                   method = "nearest",
-                  caliper = 0.1,
+                  caliper = 0.2,
                   ratio=1,
                   data = test_data_sub)
->>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
 
 # summary(PS_model, standardize=TRUE)
-sd_data <- bal.tab(PS_model_mahalanobis_fentanyl, binary = "std", un = TRUE)
+sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
 sd_data
 #==================================================================#
 # PS score visualisation
@@ -761,24 +739,8 @@ index <-
 
 score_before_matching <- data.frame( first_bill_drug = PS_model$model$y, 
                                          pscore= PS_model$model$fitted.values)
-
 score_after_matching <- data.frame( first_bill_drug = PS_model$model$y[index], 
                                          pscore = PS_model$model$fitted.values[index])
-
-
-
-<<<<<<< HEAD
-=======
-return(plot)
-
-
-}
-Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
-Distribution_before_matching
-
->>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
-Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
-Distribution_after_matching
 
 #==================================================================#
 # PS mactched cohort
@@ -881,7 +843,7 @@ sd_plot_dataset <-
   select( Type, Diff.Un, Diff.Adj) %>% 
   tibble::rownames_to_column( var = "variable_names") %>% 
   filter( variable_names != "distance") %>% 
-  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) %>% 
+  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) 
   mutate( variable_names = factor( variable_names,
                                       levels = c( "sex_H",
                                                   "initiation_age",
@@ -909,15 +871,14 @@ sd_plot_dataset <-
 
 
 
-sd_plot <- 
   ggplot( data = sd_plot_dataset ) +
   geom_point( aes(x = Diff.Un , y = variable_names), shape = 1, size = 2) +
   geom_point( aes(x = Diff.Adj , y = variable_names, color = "red"), shape = 17, size = 2.5) +
   geom_vline(xintercept = 0, color = "grey") +
   geom_vline(xintercept = -10, color = "grey", linetype="longdash", size = 1) +
   geom_vline(xintercept = 10, color = "grey", linetype="longdash", size = 1) +
-  scale_x_continuous(limits = c( -100, 30),
-                     breaks = seq( -100, 30, 10))+
+  # scale_x_continuous(limits = c( -100, 100),
+  #                    breaks = seq( -100, 100, 10))+
   scale_y_discrete(limits = rev(levels(sd_plot_dataset$variable_names))) +
   
   labs(x = "\nPercentage standardised difference",
