@@ -82,11 +82,13 @@ Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_pob
                                col_names = TRUE)
 
 #dictionary datasets
-Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.xlsx")
-Dic_history_cancer <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_cancer.xlsx")
-Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
-Dic_history_medication <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_medication.xlsx")
-Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
+catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xlsx") %>% filter( agr != "CCI")
+
+# Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.xlsx")
+# Dic_history_cancer <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_cancer.xlsx")
+# Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
+# Dic_history_medication <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_history_medication.xlsx")
+# Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
 
 #prepared datasets
 # load("R_datasets/baseline_cohort_100.RData")
@@ -113,6 +115,7 @@ check_dup_diagnosis <- distinct(diagnosis, idp, dia_cod, dia_start_date, .keep_a
 check_dup_social_variables <- distinct(social_variables, idp, economic_level, rural, .keep_all = TRUE) #(confirm no duplicate row)
 check_dup_clinical_variables <- distinct(clinical_variables,idp,clinical_cod, clinical_date, val, .keep_all = TRUE) #(confirm no duplicate row)
 
+
 #data preparation
 BMI_dataset <- 
   clinical_variables %>% 
@@ -121,49 +124,51 @@ BMI_dataset <-
 
 # database population -----------------------------------------------------
 set.seed(1)
-sub_Denominator <- sample_frac(Denominator_data, 0.1)
+sub_Denominator <- sample_frac(Denominator_data, 0.01)
 #=======================================================#
 # all registered subjects with billing data after 2007
 #=======================================================#
-database_population <- 
-  Denominator_data %>% 
-    select( idp) %>% 
-    left_join( select( billing, -billing_agr), by = "idp") %>% 
-    left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
-    # filter studied drugs and observation period
-    filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
-    group_by( idp) %>% 
-    arrange( bill_date) %>% 
-    mutate( seq = row_number(), total_seq = n()) %>% # create two index
-    mutate( first_bill_time = bill_date[1], first_bill_drug = Specific_drug[1]) %>% 
-    # index for two drugs dispensed on the same same entry day
-    mutate( index_double_user = case_when(any(seq >= 2 & first_bill_time == bill_date & Specific_drug != first_bill_drug) ~ 1,
-                                         TRUE ~ 0)) %>% 
-    ungroup() %>% 
-    # filter (select one billing record for each person)
-    filter( seq == 1) %>% 
-    ungroup()  
+database_population_codeine <- 
+  sub_Denominator %>% 
+  select( idp) %>% 
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label) %>% 
+  # filter studied drugs and observation period
+  filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+  group_by( idp) %>% 
+  arrange( bill_date) %>% 
+  mutate( seq = row_number(), total_seq = n()) %>% # create two index
+  mutate( first_bill_time = bill_date[1], first_bill_drug = Drug_name[1]) %>% 
+  # index for two drugs dispensed on the same same entry day
+  mutate( index_double_user = case_when(any(seq >= 2 & first_bill_time == bill_date & Drug_name != first_bill_drug) ~ 1,
+                                       TRUE ~ 0)) %>% 
+  ungroup() %>% 
+  # filter (select one billing record for each person)
+  filter( seq == 1) %>% 
+  ungroup()  
 
-nrow(database_population)
+nrow(database_population_codeine)
 
 #==================================================================#
 # generate population with study durg during the look-back period 
 #==================================================================#
-look_back_population <- 
-  database_population %>% 
+look_back_population_codeine <- 
+  database_population_codeine %>% 
   select( idp, first_bill_time) %>% 
   left_join( select( billing, -billing_agr), by = "idp") %>% 
-  left_join( select( Dic_analgesics, ATC_code, Specific_drug), by = c("billing_cod" = "ATC_code")) %>% 
-  filter( !is.na(Specific_drug), Specific_drug %in% c("tramadol", "codeine")) %>% 
+  left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label) %>% 
+  filter( Drug_name %in% c("tramadol", "codeine")) %>% 
   mutate( look_back_date = first_bill_time - 365) %>% 
   filter( bill_date >= look_back_date, bill_date < first_bill_time) %>% 
   distinct( idp) %>% 
   mutate( look_back_index = 1)
 
 
-database_population <- 
-  database_population %>% 
-  left_join( look_back_population, by = "idp") %>% 
+database_population_codeine <- 
+  database_population_codeine %>% 
+  left_join( look_back_population_codeine, by = "idp") %>% 
   mutate( look_back_index = case_when( look_back_index == 1 ~ 1,
                                        TRUE ~ 0))
 
@@ -173,8 +178,8 @@ database_population <-
 #==================================================================#
 # Aged >= 18 years old on the date of first dispensation (entry date) of studied drugs 
 #==================================================================#
-study_population_stage1 <- 
-  database_population %>% 
+study_population_stage1_codeine <- 
+  database_population_codeine %>% 
   left_join( demography, by = "idp") %>% 
   #important: check if there are missing values for demographics variables
   # sapply(function(x)sum(is.na(x)))
@@ -187,96 +192,93 @@ study_population_stage1 <-
 #==================================================================#
 # No cancer previous or at the time of the entry date
 #==================================================================#
-study_population_stage2 <- 
-  study_population_stage1 %>% 
-  left_join( select(check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>% 
-  left_join( Dic_history_cancer, by = "dia_cod") %>% 
-  left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
+study_population_stage2_codeine <- 
+  study_population_stage1_codeine %>% 
+  left_join( select(check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp")  %>% 
+  left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+  rename( disease_name = English_label, disease_group = variable_group) %>% 
   group_by( idp) %>% 
   #index for previous cancer event
-  mutate( history_cancer = case_when( any( !is.na(cancer_label) & dia_start_date <= first_bill_time ) ~ 1,
+  mutate( history_cancer = case_when( any( disease_group == "baseline_exclude" & dia_start_date <= first_bill_time ) ~ 1,
                                               TRUE ~ 0)) %>% 
-  mutate( history_outcomes = case_when( any( !is.na(Disease_Group) & dia_start_date <= first_bill_time ) ~ 1,
+  mutate( history_outcomes = case_when( any( disease_group == "outcome" & dia_start_date <= first_bill_time ) ~ 1,
                                               TRUE ~ 0)) %>% 
   ungroup() %>% 
   # filter subjects with cancer
   filter( history_cancer == 0) %>% 
   group_by( idp) %>% 
   filter( row_number() == 1) %>% 
-  select( -dia_cod, -dia_start_date, -cancer_label, -Disease_Group, -Disease_Specific ) %>% 
+  select( -dia_cod, -dia_start_date, -disease_name, -disease_group, -history_cancer ) %>% 
   ungroup()
 
 
 
 
-nrow(study_population_stage2)
+nrow(study_population_stage2_codeine)
 
 
 
 # Finial cohort -----------------------------------------------------------
-#==================================================================#
-# Continuous enrolment in the database < 1 year before the entry date 
-#==================================================================#
-Final_cohort_stage1 <- 
-  study_population_stage2 %>% 
-  filter( initiation_gap >= 1)
 
-nrow(study_population_stage2) - nrow(Final_cohort_stage1) 
-
-#==================================================================#
-# withou dispensation one year before index date
-#==================================================================#
-Final_cohort_stage2 <- 
-  Final_cohort_stage1 %>% 
-  filter(  look_back_index == 0) 
-
-nrow(Final_cohort_stage1) - nrow(Final_cohort_stage2) 
-
-
-#==================================================================#
-# Dispensed both tramadol and codeine on the entry date 
-#==================================================================#
-Final_cohort_stage3 <- 
-  Final_cohort_stage2 %>% 
-  filter( index_double_user == 0) 
-
-nrow(Final_cohort_stage2) - nrow(Final_cohort_stage3) 
-#==================================================================#
-# No outcomes of interest previous or at the time of the entry date
-#==================================================================#
-Final_cohort_100 <- 
-  Final_cohort_stage3 %>% 
+Final_cohort_codeine_100 <- 
+  study_population_stage2_codeine %>% 
+  #==================================================================#
+  # Continuous enrolment in the database < 1 year before the entry date 
+  #==================================================================#
+  filter( initiation_gap >= 1) %>% 
+  #==================================================================#
+  # withou dispensation one year before index date
+  #==================================================================#
+  filter(  look_back_index == 0) %>% 
+  #==================================================================#
+  # Dispensed both tramadol and codeine on the entry date 
+  #==================================================================#
+  filter( index_double_user == 0) %>% 
+  #==================================================================#
+  # No outcomes of interest previous or at the time of the entry date
+  #==================================================================#
   filter( history_outcomes == 0) 
+  
+  
+Exclusion_summary <- 
+  study_population_stage2_codeine %>% 
+  summarise( not_continuous_enrol = sum(initiation_gap < 1),
+             with_prior_dispensation = sum(look_back_index == 1),
+             double_user = sum(index_double_user == 1),
+             with_outcome = sum(history_outcomes == 1))
+  
 
-nrow(Final_cohort_stage3) - nrow(Final_cohort_100) 
-nrow(Final_cohort_100) 
+  
+  
 
-table( Final_cohort_100$index_double_user)
+
+
+table( Final_cohort_100$first_bill_drug)
 
 save(Final_cohort_100, file="R_datasets/Final_cohort_100.RData")
 
 
 
 # Link to other baseline variables ----------------------------------------
-baseline_cohort_100 <- 
-  Final_cohort %>% 
+baseline_cohort_codeine_100 <- 
+  Final_cohort_codeine_100 %>% 
   left_join( social_variables, by = "idp") %>%
   left_join( BMI_dataset, by = "idp") %>%
-  
-  #==================================================================#
-  # deal with missing variables: economic_level, rural 
-  #==================================================================#
-  
+  # 
+  # #==================================================================#
+  # # deal with missing variables: economic_level, rural 
+  # #==================================================================#
+  # 
   mutate(economic_level = case_when(economic_level == "" ~ "Ms",
                                     TRUE ~ economic_level),
          rural = case_when(rural == "" ~ "Ms",
                            TRUE ~ rural)) %>%
   mutate(BMI_record_gap = as.numeric( difftime(first_bill_time, clinical_date, units = "days"))) %>%
-  
-  #==================================================================#
-  # index for eligiable records of BMI (6 months before index date)
-  #==================================================================#
-
+  # 
+  # #==================================================================#
+  # # index for eligiable records of BMI (6 months before index date)
+  # #==================================================================#
+  # 
   mutate( BMI_index_records = case_when( BMI_record_gap >= 0 & BMI_record_gap <= 365 ~ 1,
                      TRUE ~ 0)) %>%
   group_by(idp) %>%
@@ -287,31 +289,19 @@ baseline_cohort_100 <-
   distinct( idp, sex, first_bill_time, first_bill_drug, initiation_age,
             economic_level, rural,
             BMI_value) %>%
-
-  #==================================================================#
-  #  GP visits one year before cohort entry
-  #==================================================================#
-  left_join( select( admission, idp, admission_cod, admission_date), by = "idp") %>% 
-  mutate( admission_record_gap = as.numeric( difftime(first_bill_time, admission_date, units = "days"))) %>% 
+  # 
+  # #==================================================================#
+  # #  GP and hospital visits one year before cohort entry
+  # #==================================================================#
+  left_join( select( admission, idp, admission_cod, admission_date), by = "idp") %>%
+  mutate( admission_record_gap = as.numeric( difftime(first_bill_time, admission_date, units = "days"))) %>%
   mutate( admission_index_records_10999 = case_when( admission_record_gap >= 0 & admission_record_gap <= 365 & admission_cod == 10999 ~ 1,
+                                                     TRUE ~ 0)) %>%
+  mutate( admission_index_records_30999 = case_when( admission_record_gap >= 0 & admission_record_gap <= 365 & admission_cod == 30999 ~ 1,
                                                      TRUE ~ 0)) %>%
   group_by(idp) %>%
   mutate( admission_times_10999 = case_when(any(admission_index_records_10999 == 1) ~ sum(admission_index_records_10999),
           TRUE ~ 0)) %>%
-  distinct(idp, sex, first_bill_time, first_bill_drug, initiation_age,
-           economic_level, rural,
-           BMI_value,
-           admission_times_10999) %>%
-  ungroup() %>% 
-  
-  #==================================================================#
-  #  hospital  visits one year before cohort entry
-  #==================================================================#
-  left_join( select( admission, idp, admission_cod, admission_date), by = "idp") %>% 
-  mutate( admission_record_gap = as.numeric( difftime(first_bill_time, admission_date, units = "days"))) %>% 
-  mutate( admission_index_records_30999 = case_when( admission_record_gap >= 0 & admission_record_gap <= 365 & admission_cod == 30999 ~ 1,
-                                                     TRUE ~ 0)) %>%
-  group_by(idp) %>% 
   mutate( admission_times_30999 = case_when(any(admission_index_records_30999 == 1) ~ sum(admission_index_records_30999),
                                             TRUE ~ 0)) %>%
   distinct(idp, sex, first_bill_time, first_bill_drug, initiation_age,
@@ -319,43 +309,66 @@ baseline_cohort_100 <-
            BMI_value,
            admission_times_10999,
            admission_times_30999) %>%
-  ungroup() %>% 
-
-#==================================================================#
-# commorbidity history, use check_dup_diagnosis rather than diagnosis
-#==================================================================#
-  left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
-  left_join( Dic_commorbidity, by = "dia_cod") %>%
+  ungroup() %>%
+  
+  # #==================================================================#
+  # #  medication history
+  # #==================================================================#
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( catalog_clear, cod, English_label, variable_group), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label, Drug_group = variable_group) %>% 
   # index for eligiable records of history of other disease
-  mutate( commorbidities_index_records = case_when( dia_start_date <= first_bill_time & !is.na(commorbidity_label) ~ 1,
+  mutate( medication_index_records = case_when( bill_date <= first_bill_time & Drug_group == "baseline"  ~ 1,
                                                     TRUE ~ 0)) %>%
   # replace unnecessary disease label with NA
-  mutate( commorbidity_label = case_when(commorbidities_index_records == 1 ~ commorbidity_label,
+  mutate( medication_label = case_when(medication_index_records == 1 ~ Drug_name,
+                                         TRUE ~ "Other_drug")) %>%
+  # index for eligiable subjects of history of other disease
+  group_by(idp) %>%
+  mutate( medication_index_subjects = case_when(any(medication_index_records == 1) ~ 1,
+                                                    TRUE ~ 0)) %>%
+  ungroup() %>% 
+  distinct(idp, sex, first_bill_time, first_bill_drug, initiation_age,
+           economic_level, rural,
+           BMI_value,
+           admission_times_10999,
+           admission_times_30999,
+           medication_label, medication_index_records) %>% 
+  spread( medication_label, medication_index_records, fill = 0) %>% 
+  
+  # ==================================================================#
+  # commorbidity history, use check_dup_diagnosis rather than diagnosis
+  # ==================================================================#
+  left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+  left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+  rename( disease_name = English_label, disease_group = variable_group) %>% 
+  # index for eligiable records of history of other disease
+  mutate( commorbidities_index_records = case_when( dia_start_date <= first_bill_time & disease_group == "baseline"  ~ 1,
+                                                    TRUE ~ 0)) %>%
+  # replace unnecessary disease label with NA
+  mutate( commorbidity_label = case_when(commorbidities_index_records == 1 ~ disease_name,
                                          TRUE ~ "Other_or_non_commorbidities")) %>%
   # index for eligiable subjects of history of other disease
   group_by(idp) %>%
   mutate( commorbidities_index_subjects = case_when(any(commorbidities_index_records == 1) ~ 1,
                                                     TRUE ~ 0)) %>%
   ungroup() %>%
-  # filter unnecessary records
-  filter( !(commorbidities_index_subjects == 1 & commorbidities_index_records == 0) ) %>%
+  # # filter unnecessary records
+  # filter( !(commorbidities_index_subjects == 1 & commorbidities_index_records == 0) ) %>% 
   # remove duplicate diagnosis
   distinct(idp, sex, first_bill_time, first_bill_drug, initiation_age,
            economic_level, rural,
            BMI_value,
            admission_times_10999,
            admission_times_30999,
-           commorbidity_label, commorbidities_index_records) %>%
+           anticonvulsant, benzodiazepines, hypnotics, SSIR,
+           commorbidity_label, commorbidities_index_records) %>% 
   # transform from long to wide data
   spread(commorbidity_label, commorbidities_index_records, fill = 0)
   
 
   
 save(baseline_cohort_100, file="R_datasets/baseline_cohort_100.RData")
-
-
-
-
 
 # Follow-up periods -------------------------------------------------------
 
@@ -436,23 +449,22 @@ outcome
 Follow_ITT_func <- function(outcomes){
   start.time <- Sys.time()
   follow_up_dataset <- 
-    baseline_cohort_100 %>% 
+    baseline_cohort_codeine_100 %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
-    left_join( Dic_CER_adverse_events, by = "dia_cod") %>% 
+    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = English_label, disease_group = variable_group) %>% 
     #==================================================================#
     # index for follow-up period (ITT)
     #==================================================================#
-    mutate( outcome_occur_record_ITT = case_when( dia_start_date > first_bill_time & Disease_Group %in% outcomes ~ 1,
+    mutate( outcome_occur_record_ITT = case_when( dia_start_date > first_bill_time & disease_group == "outcome" ~ 1,
                                                   TRUE ~ 0)) %>% 
     group_by( idp) %>%
     mutate( outcome_occur_subject_ITT = case_when( any(outcome_occur_record_ITT == 1) ~ 1,
                                                    TRUE ~ 0)) %>% 
-    ungroup() %>%
-    filter( !(outcome_occur_subject_ITT == 1 & outcome_occur_record_ITT == 0)) %>% 
-    group_by( idp) %>% 
-    mutate( outcome_occur_date_ITT = case_when( outcome_occur_subject_ITT == 1 ~ min(dia_start_date),
+    arrange( desc(outcome_occur_record_ITT), dia_start_date) %>% 
+    mutate( outcome_occur_date_ITT = case_when( outcome_occur_subject_ITT == 1 ~ dia_start_date[1],
                                                 TRUE ~ as.Date("2017-12-31"))) %>% 
     #==================================================================#
     # condense
@@ -466,6 +478,9 @@ Follow_ITT_func <- function(outcomes){
   print(end.time - start.time)
   return(follow_up_dataset)
 }
+table(aa$outcome_occur_subject_ITT)
+
+aa <- Follow_ITT_func()
 
 follow_up_dataset_ITT_100_specific <- lapply( outcome, Follow_ITT_func) 
 names(follow_up_dataset_ITT_100_specific) <- outcome
@@ -485,11 +500,11 @@ save(follow_up_dataset_ITT_100, file="R_datasets/follow_up_dataset_ITT_100.RData
  
 # Missing data imputation -------------------------------------------------
 
-summary(baseline_cohort)
-sapply(baseline_cohort, function(x)sum(is.na(x)))
+summary(baseline_cohort_codeine_100)
+sapply(baseline_cohort_codeine_100, function(x)sum(is.na(x)))
 
 mice_cohort <- 
-  baseline_cohort %>% 
+  baseline_cohort_codeine_100 %>% 
   select(  -Other_or_non_commorbidities) %>% 
   mice( m = 1, method = 'cart', printFlag = FALSE)
 
@@ -497,9 +512,9 @@ imputation_plot <- densityplot(mice_cohort, ~BMI_value)
 imputation_plot
 baseline_cohort_imputation <- complete(mice_cohort)
 
-trellis.device(device="png", filename="Figures/imputation_plot.png")
-print(imputation_plot)
-dev.off()
+# trellis.device(device="png", filename="Figures/imputation_plot.png")
+# print(imputation_plot)
+# dev.off()
 
 
 # Propensity score matching (method 1)-----------------------------------------------
@@ -510,20 +525,9 @@ dev.off()
 PS_model_dataset <- 
   baseline_cohort_imputation %>% 
   mutate( first_bill_drug = case_when(first_bill_drug == "tramadol" ~ 1,
-                                      TRUE ~ 0)) %>% 
-  mutate(sex = as.factor(sex),
-         economic_level = as.factor(economic_level),
-         rural = as.factor(rural),
-         Alzheimer_disease = as.factor(Alzheimer_disease),
-         Chronic_cough = as.factor( Chronic_cough),
-         Chronic_kidney_disease = as.factor( Chronic_kidney_disease),
-         Chronic_liver_disease = as.factor( Chronic_liver_disease),
-         Chronic_musculoskeletal_pain_disorders = as.factor( Chronic_musculoskeletal_pain_disorders),
-         COPD = as.factor( COPD),
-         Diabetes = as.factor( Diabetes),
-         Parkinson_disease = as.factor( Parkinson_disease),
-         Peripheral_vascular_disease = as.factor( Peripheral_vascular_disease)) 
-
+                                      TRUE ~ 0)) 
+factor_list <- setdiff( names(PS_model_dataset), c("idp", "first_bill_time", "first_bill_drug", "initiation_age", "BMI_value", "admission_times_10999", "admission_times_30999"))
+PS_model_dataset[factor_list] <- lapply( PS_model_dataset[factor_list], factor)
 str(PS_model_dataset)
 
 covariates <- setdiff( names(PS_model_dataset), c( "idp", "first_bill_time", "first_bill_drug"))
@@ -544,7 +548,7 @@ PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_v
 
 # summary(PS_model, standardize=TRUE)
 sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
-sd_data$Observations
+sd_data
 #==================================================================#
 # PS score visualisation
 #==================================================================#
@@ -595,6 +599,8 @@ return(plot)
 
 }
 Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
+Distribution_before_matching
+
 Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
 Distribution_after_matching
 
@@ -699,7 +705,7 @@ sd_plot_dataset <-
   select( Type, Diff.Un, Diff.Adj) %>% 
   tibble::rownames_to_column( var = "variable_names") %>% 
   filter( variable_names != "distance") %>% 
-  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) %>% 
+  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) 
   mutate( variable_names = factor( variable_names,
                                       levels = c( "sex_H",
                                                   "initiation_age",
@@ -727,7 +733,7 @@ sd_plot_dataset <-
 
 
 
-sd_plot <- 
+
   ggplot( data = sd_plot_dataset ) +
   geom_point( aes(x = Diff.Un , y = variable_names), shape = 1, size = 2) +
   geom_point( aes(x = Diff.Adj , y = variable_names, color = "red"), shape = 17, size = 2.5) +
