@@ -483,8 +483,13 @@ table(follow_up_dataset_ITT_100_fentanyl$outcome_occur_subject_ITT)
 summary(baseline_cohort_100_fentanyl)
 sapply(baseline_cohort_100_fentanyl, function(x)sum(is.na(x)))
 
+<<<<<<< HEAD
 mice_cohort_fentanyl <- 
   baseline_cohort_100_fentanyl %>% 
+=======
+mice_cohort <- 
+  baseline_cohort_100 %>% 
+>>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
   select(  -Other_or_non_commorbidities) %>% 
   mice( m = 1, method = 'cart', printFlag = FALSE)
 
@@ -526,6 +531,7 @@ str(PS_model_dataset)
 covariates <- setdiff( names(PS_model_dataset), c( "idp", "first_bill_time", "first_bill_drug"))
 dependent_variable <- "first_bill_drug"
 
+<<<<<<< HEAD
 
 mylogit <- glm( reformulate(termlabels = covariates, response = dependent_variable), 
                 data = PS_model_dataset, 
@@ -563,6 +569,8 @@ Distribution_before_matching_fentanyl <- plot_distribution(dataset = score_befor
 Distribution_after_matching_fentanyl <- plot_distribution(dataset = score_after_matching)
 Distribution_after_matching_fentanyl
 
+=======
+>>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
 set.seed(1)
 test_data_sub <- sample_frac(PS_model_dataset, 0.2)
 str(test_data_sub)
@@ -570,6 +578,7 @@ str(test_data_sub)
 #==================================================================#
 # propensity score modelling
 #==================================================================#
+<<<<<<< HEAD
 PS_model_mahalanobis_fentanyl <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
                               # m.order = "smallest",
                               method = "nearest",
@@ -579,6 +588,13 @@ PS_model_mahalanobis_fentanyl <- matchit( reformulate(termlabels = covariates, r
                               data = PS_model_dataset)
 PS_model_unweight_fentanyl <- PS_model
 save(PS_model_unweight_fentanyl, file="R_datasets/PS_model_unweight_fentanyl.RData")
+=======
+PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
+                  method = "nearest",
+                  caliper = 0.1,
+                  ratio=1,
+                  data = test_data_sub)
+>>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
 
 # summary(PS_model, standardize=TRUE)
 sd_data <- bal.tab(PS_model_mahalanobis_fentanyl, binary = "std", un = TRUE)
@@ -609,6 +625,16 @@ score_after_matching <- data.frame( first_bill_drug = PS_model$model$y[index],
 
 
 
+<<<<<<< HEAD
+=======
+return(plot)
+
+
+}
+Distribution_before_matching <- plot_distribution(dataset = score_before_matching)
+Distribution_before_matching
+
+>>>>>>> 5febee65ff4d8570322f15da8fea55838958d8b1
 Distribution_after_matching <- plot_distribution(dataset = score_after_matching)
 Distribution_after_matching
 
