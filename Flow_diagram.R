@@ -94,7 +94,7 @@ catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xls
 # Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
 
 #prepared datasets
-# load("R_datasets/baseline_cohort_100.RData")
+load("R_datasets/baseline_cohort_fentanyl_100_imputation.RData")
 # load("R_datasets/follow_up_dateset.RData")
 
 # set.seed(1)
@@ -698,31 +698,37 @@ plot_distribution <- function(dataset){
   
 }
 Distribution_before_matching_fentanyl <- plot_distribution(dataset = score_before_matching)
+Distribution_after_matching_fentanyl <- plot_distribution(dataset = score_after_matching)
 Distribution_before_matching_fentanyl
+Distribution_after_matching_fentanyl
 
 table(baseline_cohort_fentanyl_100_imputation$first_bill_drug)
 
 
-set.seed(1)
-test_data_sub <- sample_frac(PS_model_dataset, 0.2)
-str(test_data_sub)
+# set.seed(1)
+# test_data_sub <- sample_frac(PS_model_dataset, 0.2)
+# str(test_data_sub)
 
 #==================================================================#
 # propensity score modelling
 #==================================================================#
-PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
-                  method = "nearest",
-                  caliper = 0.2,
-                  ratio=1,
-                  data = test_data_sub)
+PS_model_fentanyl_100 <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
+                              method = "nearest",
+                              caliper = 0.2,
+                              ratio=1,
+                              data = PS_model_dataset)
+
+
+save(PS_model_fentanyl_100, file="R_datasets/PS_model_fentanyl_100.RData")
+
 
 # summary(PS_model, standardize=TRUE)
-sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
+sd_data <- bal.tab(PS_model_fentanyl_100, binary = "std", un = TRUE)
 sd_data
 #==================================================================#
 # PS score visualisation
 #==================================================================#
-plot(PS_model, type = 'jitter', interactive = FALSE)
+plot(PS_model_fentanyl_100, type = 'jitter', interactive = FALSE)
 
 
 #index for matched rows
@@ -737,10 +743,10 @@ index <-
 
   
 
-score_before_matching <- data.frame( first_bill_drug = PS_model$model$y, 
-                                         pscore= PS_model$model$fitted.values)
-score_after_matching <- data.frame( first_bill_drug = PS_model$model$y[index], 
-                                         pscore = PS_model$model$fitted.values[index])
+score_before_matching <- data.frame( first_bill_drug = PS_model_fentanyl_100$model$y, 
+                                         pscore= PS_model_fentanyl_100$model$fitted.values)
+score_after_matching <- data.frame( first_bill_drug = PS_model_fentanyl_100$model$y[index], 
+                                         pscore = PS_model_fentanyl_100$model$fitted.values[index])
 
 #==================================================================#
 # PS mactched cohort
@@ -838,47 +844,63 @@ forestplot
 
 
 # Standard difference before and after plot -------------------------------
+
+orders <- 
+c("initiation_age", "sex_H",
+  "economic_level_Ms", "economic_level_U1", "economic_level_U2", "economic_level_U3", "economic_level_U4" , "economic_level_U5",
+  "rural_Ms", "rural_R", "rural_U",
+  "BMI_value",
+  "alzheimer_disease","angina", 
+  "burn_injuries", "cardiac_insufficiency_heart_failure", "chronic_kidney_disease",
+  "chronic_liver_disease", "copd", "cough",
+  "diabetes", "diarrhoea", "dyspnea",
+  "malabsorption_disorder", "myicardial_infarction", "neurologic_pathologies",
+  "back_pain","neck_pain", "fybromialgia", "oa", "osteoporosis", "rheumatoid_arthritis", "other_musculskeletal_disorders",
+  "parkinson_disease",
+  "peripheral_vascular_disease", "pulmonary_oedema", 
+  "stroke","surgery", "tia", "traffic",
+  "anticonvulsant", "benzodiazepines", "hypnotics", "SSIR",
+  "admission_times_10999", "admission_times_30999" 
+  )
+
+label <- 
+  c("initiation_age", "Female",
+    "economic_level_Ms", "economic_level_U1", "economic_level_U2", "economic_level_U3", "economic_level_U4" , "economic_level_U5",
+    "rural_Ms", "rural_R", "rural_U",
+    "BMI_value",
+    "alzheimer_disease","angina", 
+    "burn_injuries", "cardiac_insufficiency_heart_failure", "chronic_kidney_disease",
+    "chronic_liver_disease", "copd", "cough",
+    "diabetes", "diarrhoea", "dyspnea",
+    "malabsorption_disorder", "myicardial_infarction", "neurologic_pathologies",
+    "back_pain","neck_pain", "fybromialgia", "oa", "osteoporosis", "rheumatoid_arthritis", "other_musculskeletal_disorders",
+    "parkinson_disease",
+    "peripheral_vascular_disease", "pulmonary_oedema", 
+    "stroke","surgery", "tia", "traffic",
+    "anticonvulsant", "benzodiazepines", "hypnotics", "SSIR",
+    "Hosptial visits", "GP visits" 
+  )
+
 sd_plot_dataset <- 
   sd_data$Balance %>% 
   select( Type, Diff.Un, Diff.Adj) %>% 
   tibble::rownames_to_column( var = "variable_names") %>% 
   filter( variable_names != "distance") %>% 
-  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) 
-  mutate( variable_names = factor( variable_names,
-                                      levels = c( "sex_H",
-                                                  "initiation_age",
-                                                  "economic_level_Ms",
-                                                  "economic_level_U1",
-                                                  "economic_level_U2",
-                                                  "economic_level_U3",
-                                                  "economic_level_U4",
-                                                  "economic_level_U5",
-                                                  "rural_Ms",
-                                                  "rural_R",
-                                                  "rural_U",
-                                                  "BMI_value",
-                                                  "Alzheimer_disease",
-                                                  "Chronic_cough",
-                                                  "Chronic_kidney_disease",
-                                                  "Chronic_liver_disease",
-                                                  "Chronic_musculoskeletal_pain_disorders",
-                                                  "COPD",
-                                                  "Diabetes",
-                                                  "Parkinson_disease",
-                                                  "Peripheral_vascular_disease",
-                                                  "admission_times_10999",
-                                                  "admission_times_30999")))
+  mutate( Diff.Un = Diff.Un * 100, Diff.Adj = Diff.Adj * 100) %>% 
+  mutate( variable_names = factor( variable_names, levels = orders, labels = label))
 
 
 
+
+
+sd_plot <- 
   ggplot( data = sd_plot_dataset ) +
   geom_point( aes(x = Diff.Un , y = variable_names), shape = 1, size = 2) +
   geom_point( aes(x = Diff.Adj , y = variable_names, color = "red"), shape = 17, size = 2.5) +
   geom_vline(xintercept = 0, color = "grey") +
   geom_vline(xintercept = -10, color = "grey", linetype="longdash", size = 1) +
   geom_vline(xintercept = 10, color = "grey", linetype="longdash", size = 1) +
-  # scale_x_continuous(limits = c( -100, 100),
-  #                    breaks = seq( -100, 100, 10))+
+  scale_x_continuous(limits = c( -100, 100), breaks = seq( -100, 100, 10)) +                  
   scale_y_discrete(limits = rev(levels(sd_plot_dataset$variable_names))) +
   
   labs(x = "\nPercentage standardised difference",
@@ -906,8 +928,8 @@ sd_plot
 ggsave(filename = "sd_plot_fentanyl.png",
        path = "Figures",
        plot = sd_plot,
-       width = 5.5,
-       height = 5.5,
+       width = 7,
+       height = 6.5,
        dpi = 300,
        type = "cairo")
 
