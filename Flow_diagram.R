@@ -65,7 +65,7 @@ library(optmatch)
 # library(ckbplotr)
 library(mice)
 library(lattice)
-library( cobalt)
+library(cobalt)
 # library(fastDummies)
 
 getwd()
@@ -91,7 +91,11 @@ catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xls
 # Dic_commorbidity <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_commorbidity.xlsx")
 
 #prepared datasets
-# load("R_datasets/baseline_cohort_100.RData")
+load("R_datasets/Final_cohort_codeine_100.RData")
+load("R_datasets/baseline_cohort_codeine_100.RData")
+
+load("R_datasets/PS_model_codeine_100.RData")
+
 # load("R_datasets/follow_up_dateset.RData")
 
 # set.seed(1)
@@ -248,11 +252,11 @@ Exclusion_summary <-
              with_outcome = sum(history_outcomes == 1))
   
 
-save(Final_cohort_codeine_100, file="R_datasets/Final_cohort_codeine_100.RData")
+# save(Final_cohort_codeine_100, file="R_datasets/Final_cohort_codeine_100.RData")
 
-# set.seed(1)
-# Final_cohort_codeine <- sample_frac(Final_cohort_codeine_100, 0.1)
-# str(Final_cohort_codeine)
+set.seed(1)
+Final_cohort_codeine_100 <- sample_frac(Final_cohort_codeine_100, 0.1)
+str(Final_cohort_codeine)
 
 
 
@@ -375,10 +379,10 @@ specific_outcome <-
   unlist() %>% 
   unname()
 
-Follow_ATT_whole_func <- function( inputdata){
+Follow_ATT_whole_func <- function( ){
   start.time <- Sys.time()
   follow_up_dataset <- 
-    inputdata %>% 
+    baseline_cohort_codeine_100 %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     left_join( select( billing, -billing_agr), by = "idp") %>% 
     left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
@@ -397,8 +401,8 @@ Follow_ATT_whole_func <- function( inputdata){
                                       TRUE ~ NA_real_),
             switcher_seq_index = case_when( switcher == 1  ~ min(switcher_seq, na.rm = TRUE) - 1,
                                             TRUE ~ NA_real_),
-            switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 15,
-                                     TRUE ~ bill_date[n()] + 15)) %>% 
+            switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 45,
+                                     TRUE ~ bill_date[n()] + 45)) %>% 
     #==================================================================#
     # cencored date for discontinuation 
     #==================================================================# 
@@ -409,8 +413,8 @@ Follow_ATT_whole_func <- function( inputdata){
                                              TRUE ~ NA_real_),
             discontinuation_index = case_when( discontinuationer == 1  ~ min(discontinuation_seq, na.rm = TRUE) - 1,
                                                TRUE ~ NA_real_),
-            discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + 15,
-                                              TRUE ~ bill_date[n()] + 15) ) %>% 
+            discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + 45,
+                                              TRUE ~ bill_date[n()] + 45) ) %>% 
     ungroup( idp) %>% 
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
     mutate( cencored_date = pmin( switch_date, discontinuation_date, departure_date)) %>% 
@@ -445,10 +449,10 @@ Follow_ATT_whole_func <- function( inputdata){
   return(follow_up_dataset)
   
 }
-Follow_ATT_specific_func <- function( inputdata, serious_outcome){
+Follow_ATT_specific_func <- function(  serious_outcome){
   start.time <- Sys.time()
   follow_up_dataset <- 
-    inputdata %>% 
+    baseline_cohort_codeine_100 %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     left_join( select( billing, -billing_agr), by = "idp") %>% 
     left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
@@ -467,8 +471,8 @@ Follow_ATT_specific_func <- function( inputdata, serious_outcome){
                                       TRUE ~ NA_real_),
             switcher_seq_index = case_when( switcher == 1  ~ min(switcher_seq, na.rm = TRUE) - 1,
                                             TRUE ~ NA_real_),
-            switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 15,
-                                     TRUE ~ bill_date[n()] + 15)) %>% 
+            switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 45,
+                                     TRUE ~ bill_date[n()] + 45)) %>% 
     #==================================================================#
     # cencored date for discontinuation 
     #==================================================================# 
@@ -479,8 +483,8 @@ Follow_ATT_specific_func <- function( inputdata, serious_outcome){
                                              TRUE ~ NA_real_),
             discontinuation_index = case_when( discontinuationer == 1  ~ min(discontinuation_seq, na.rm = TRUE) - 1,
                                                TRUE ~ NA_real_),
-            discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + 15,
-                                              TRUE ~ bill_date[n()] + 15) ) %>% 
+            discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + 45,
+                                              TRUE ~ bill_date[n()] + 45) ) %>% 
     ungroup( idp) %>% 
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
     mutate( cencored_date = pmin( switch_date, discontinuation_date, departure_date)) %>% 
@@ -516,15 +520,22 @@ Follow_ATT_specific_func <- function( inputdata, serious_outcome){
   
 }
 
-follow_up_dataset_ATT_100 <- Follow_ATT_whole_func( inputdata = baseline_cohort_codeine_100)
+ATT_whole_codeine <- Follow_ATT_whole_func()
+ATT_specific_codeine <- lapply( specific_outcome, Follow_ATT_specific_func) 
+names(ATT_specific_codeine) <- specific_outcome
+ATT_combined_codeine <- list(ATT_whole_codeine, ATT_specific_codeine)
+
+ATT_specific_dataframe <- bind_rows( ATT_specific, .id = "group_label")
 
 
+#==================save=============================================#
+# save(ATT_specific, file="R_datasets/ATT_specific.RData")
+#==================save=============================================#
 
-
-Follow_ITT_whole_func <- function( inputdata){
+Follow_ITT_whole_func <- function( ){
   start.time <- Sys.time()
   follow_up_dataset <- 
-    inputdata %>% 
+    baseline_cohort_codeine_100 %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
@@ -553,10 +564,10 @@ Follow_ITT_whole_func <- function( inputdata){
   print(end.time - start.time)
   return(follow_up_dataset)
 }
-Follow_ITT_specific_func <- function( inputdata, serious_outcome){
+Follow_ITT_specific_func <- function( serious_outcome){
   start.time <- Sys.time()
   follow_up_dataset <- 
-    inputdata %>% 
+    baseline_cohort_codeine_100 %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
@@ -586,17 +597,18 @@ Follow_ITT_specific_func <- function( inputdata, serious_outcome){
   return(follow_up_dataset)
 }
 
-follow_up_dataset_ITT_100 <- Follow_ITT_specific_func( inputdata = baseline_cohort_codeine_100, serious_outcome = "fracturas")
 
-# follow_up_dataset_ITT_100_specific <- lapply( outcome, Follow_ITT_func) 
-# names(follow_up_dataset_ITT_100_specific) <- outcome
+ITT_whole_codeine <- Follow_ITT_whole_func()
+ITT_specific_codeine <- lapply( specific_outcome, Follow_ITT_specific_func) 
+names(ITT_specific_codeine) <- specific_outcome
+
+ITT_specific_codeine$whole <- ITT_whole_codeine
+ITT_combined_codeine_dataframe <- bind_rows( ITT_specific_codeine, .id = "group_label")
+
+#==================save=============================================#
+save(ITT_combined_codeine_dataframe, file="R_datasets/ITT_combined_codeine_dataframe.RData")
+#==================save=============================================#
   
-
-
-  
-table(follow_up_dataset_ITT_100_specific$Fractures$outcome_occur_subject_ITT)
-
-
 
 sapply(follow_up_dateset_1, function(x)sum(is.na(x)))
 
@@ -612,24 +624,30 @@ sapply(baseline_cohort_codeine_100, function(x)sum(is.na(x)))
 mice_cohort <- 
   baseline_cohort_codeine_100 %>% 
   select(  -Other_or_non_commorbidities) %>% 
-  mice( m = 1, method = 'cart', printFlag = FALSE)
+  mice( method = 'mean', m = 1, maxit = 1)
+
 
 imputation_plot <- densityplot(mice_cohort, ~BMI_value)
 imputation_plot
-baseline_cohort_imputation <- complete(mice_cohort)
+baseline_cohort_codeine_100_imputation <- complete(mice_cohort)
+
+#==================save=============================================#
+save(baseline_cohort_codeine_100_imputation, file="R_datasets/baseline_cohort_codeine_100_imputation.RData")
+#==================save=============================================#
+
 
 # trellis.device(device="png", filename="Figures/imputation_plot.png")
 # print(imputation_plot)
 # dev.off()
 
 
-# Propensity score matching (method 1)-----------------------------------------------
+# Propensity score matching -----------------------------------------------
 
 #==================================================================#
 # # data preparation for PS modelling
 #==================================================================#
 PS_model_dataset <- 
-  baseline_cohort_imputation %>% 
+  baseline_cohort_codeine_100_imputation %>% 
   mutate( first_bill_drug = case_when(first_bill_drug == "tramadol" ~ 1,
                                       TRUE ~ 0)) 
 factor_list <- setdiff( names(PS_model_dataset), c("idp", "first_bill_time", "first_bill_drug", "initiation_age", "BMI_value", "admission_times_10999", "admission_times_30999"))
@@ -646,24 +664,30 @@ dependent_variable <- "first_bill_drug"
 #==================================================================#
 # propensity score modelling
 #==================================================================#
-PS_model <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
-                  method = "nearest",
-                  caliper = 0.2,
-                  ratio=1,
-                  data = PS_model_dataset)
+PS_model_codeine_100 <- matchit( reformulate(termlabels = covariates, response = dependent_variable), 
+                                  method = "nearest",
+                                  caliper = 0.2,
+                                  ratio=1,
+                                  data = PS_model_dataset)
+#==================save=============================================#
+save(PS_model_codeine_100, file="R_datasets/PS_model_codeine_100.RData")
+#==================save=============================================#
 
+#==================================================================#
+# diagnostic of propensity score matching 
+#==================================================================#
 # summary(PS_model, standardize=TRUE)
-sd_data <- bal.tab(PS_model, binary = "std", un = TRUE)
+sd_data <- bal.tab(PS_model_codeine_100, binary = "std", un = TRUE)
 sd_data
 #==================================================================#
 # PS score visualisation
 #==================================================================#
-plot(PS_model, type = 'jitter', interactive = FALSE)
+plot(PS_model_codeine_100, type = 'jitter', interactive = FALSE)
 
 
 #index for matched rows
 index <- 
-  data.frame(treat =  rownames(PS_model$match.matrix), control = PS_model$match.matrix[,1] ) %>% 
+  data.frame(treat =  rownames(PS_model_codeine_100$match.matrix), control = PS_model_codeine_100$match.matrix[,1] ) %>% 
   filter( !is.na(control)) %>%   
   mutate( control = as.character(control), treat = as.character(treat)) %>% 
   gather( condition, index, control, treat) %>% 
@@ -672,11 +696,11 @@ index <-
   unlist()
 
 
-score_before_matching <- data.frame( first_bill_drug = PS_model$model$y, 
-                                         pscore= PS_model$model$fitted.values)
+score_before_matching <- data.frame( first_bill_drug = PS_model_codeine_100$model$y, 
+                                         pscore= PS_model_codeine_100$model$fitted.values)
 
-score_after_matching <- data.frame( first_bill_drug = PS_model$model$y[index], 
-                                         pscore = PS_model$model$fitted.values[index])
+score_after_matching <- data.frame( first_bill_drug = PS_model_codeine_100$model$y[index], 
+                                         pscore = PS_model_codeine_100$model$fitted.values[index])
 
 plot_distribution <- function(dataset){
 
@@ -710,13 +734,13 @@ Distribution_after_matching
 #==================================================================#
 # PS mactched cohort
 #==================================================================#
-mathched_cohort <- 
+mathched_cohort_codine_100 <- 
   PS_model_dataset %>% 
   filter( row_number() %in% index)
 
 # Calculate statistics ( mean follow up, rate, crude HR) ------------------------------------------
 cox_dataset_ITT <- 
-  mathched_cohort %>% 
+  mathched_cohort_codine_100 %>% 
   left_join(follow_up_dataset_ATT_100, by = "idp")
 
 
@@ -754,56 +778,74 @@ names(cox_dataset)
 
 # Cox-model stratification ------------------------------------------------
 cox_dataset <- 
-  mathched_cohort %>% 
-  left_join(follow_up_dateset, by = "idp") %>% 
-  mutate( age_group = case_when( initiation_age >= 18 & initiation_age <49 ~ 1,
-                                 initiation_age >= 49 & initiation_age <69 ~ 2,
-                                 initiation_age >=69  ~ 3))
-
-table(cox_dataset$age_group)
+  mathched_cohort_codine_100 %>% 
+  left_join(ITT_combined_codeine_dataframe, by = "idp") 
 
 
-res.separate <- lapply( split(cox_dataset, cox_dataset$age_group),
+
+table(cox_dataset$group_label)
+
+
+res.separate <- lapply( split(cox_dataset, cox_dataset$group_label),
                         FUN = function(DF) {
-                           coxph( Surv(follow_up_time, outcome_occur_subject) ~ 
+                           coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
                                   first_bill_drug ,
                                   data =  DF)
                        })
 
 
-res.separate
 
-summary(res.separate$H)
-summary(res.separate$D)
-
-summary(res.separate$`1`)
-summary(res.separate$`2`)
-summary(res.separate$`3`)
-
-
+aa <- sapply(res.separate,function(x){ 
+                          dt <- summary(x)
+                          p.value<-signif(dt$wald["pvalue"], digits=2)
+                          # wald.test<-signif(x$wald["test"], digits=3)
+                          # beta<-signif(x$coef[1], digits=3);#coeficient beta
+                          sd <- signif(dt$coef[3], digits=3);
+                          HR <-signif(dt$coef[2], digits=3);#exp(beta)
+                          HR.confint.lower <- signif(dt$conf.int[,"lower .95"], 3)
+                          HR.confint.upper <- signif(dt$conf.int[,"upper .95"],3)
+                          # HR <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
+                          res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
+                          names(res)<-c( "estimate", "stderr", "lower", "upper")
+                          return(res)
+                          #return(exp(cbind(coef(x),confint(x)))) 
+                          }) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  rename( variable = rowname)
 
 
 
 # Forest plot -------------------------------------------------------------
-set.seed(57911624)
-exampleresults <- function(){
-  data.frame(variable = c('Male', 'Female', 'Age 18~49', "Age 50~69", "Age >=70"),
-             estimate = c(0.3033, 0.36855, 0.4025, 0.29121, 0.42028),
-             stderr   = c(0.05501, 0.04269, 0.08122, 0.05509, 0.05025),
-             n        = round(runif(5, 100, 2000)),
-             nb       = round(runif(5, 100, 2000)))
-}
-resultsA <- exampleresults()
 
-forestplot <- make_forest_plot(cols         = list(resultsA),
-                               exponentiate = TRUE,
-                               colnames     = c("Subgroups"),
-                               col.key      = "variable",
-                               xlim = c(0.99, 2))
+  ggplot(data=aa, aes(x=variable, y=estimate, ymin=lower, ymax=upper)) +
+  geom_pointrange(shape=20, size = 0.5)+
+  geom_hline(yintercept = 1, color = "red", linetype="longdash") +
+  coord_flip() +
+  labs( x = "Outcome",
+        y = "Hazard ratio (95% CI)")+
+  
+  theme(
+    text = element_text(family = "Candara", colour = "black"),
+    panel.background = element_blank(),
+    panel.grid.major.x = element_blank(),
+    strip.background = element_blank(),
+    # strip.text = element_blank(),
+    
+    axis.line = element_line(),
+    axis.text.y  = element_text( face = "bold"),
+    axis.title.y  = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
+    
+    legend.position = "none") 
 
-forestplot
-
-
+ggsave(filename = "Forest.png",
+       path = "Figures",
+       plot = Forest,
+       width = 5.5,
+       height = 5.5,
+       dpi = 300,
+       type = "cairo")
 
 
 
