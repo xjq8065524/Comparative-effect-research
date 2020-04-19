@@ -371,6 +371,70 @@ save(baseline_cohort_codeine_100, file="R_datasets/baseline_cohort_codeine_100.R
 
 
 
+
+# On treatment period -----------------------------------------------------
+
+# set.seed(1)
+# baseline_cohort_codeine<- sample_frac(baseline_cohort_codeine_100, 0.1)
+
+start.time <- Sys.time()
+On_treatment_codeine_100 <- 
+  baseline_cohort_codeine_100 %>% 
+  select( idp, first_bill_time, first_bill_drug) %>%
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label) %>% 
+  # filter studied drugs and observation period
+  filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+  # calculate prescription duration
+  mutate( pre_days = env * 30) %>% 
+  
+  group_by( idp) %>% 
+  arrange( bill_date) %>% 
+  mutate( bill_seq = as.numeric( row_number())) %>% 
+  #==================================================================#
+  # cencored date for switching
+  #==================================================================#
+  mutate( switcher = case_when( any(first_bill_drug != Drug_name) ~ 1,
+                                TRUE ~ 0),
+          switcher_seq = case_when( first_bill_drug != Drug_name ~ bill_seq,
+                                    TRUE ~ NA_real_),
+          switcher_seq_index = case_when( switcher == 1  ~ min(switcher_seq, na.rm = TRUE) - 1,
+                                          TRUE ~ NA_real_),
+          switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + pre_days[switcher_seq_index] + 15,
+                                   TRUE ~ bill_date[n()] + pre_days[n()] + 15)) %>% 
+  #==================================================================#
+  # cencored date for discontinuation 
+  #==================================================================# 
+  mutate( bill_date_diff = bill_date - lag(bill_date, default = first(bill_date))) %>% 
+  mutate( discontinuationer = case_when( any(bill_date_diff > 90 ) ~ 1,
+                                         TRUE ~ 0),
+          discontinuation_seq = case_when( bill_date_diff > 90 ~ bill_seq,
+                                           TRUE ~ NA_real_),
+          discontinuation_index = case_when( discontinuationer == 1  ~ min(discontinuation_seq, na.rm = TRUE) - 1,
+                                             TRUE ~ NA_real_),
+          discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + pre_days[discontinuation_index] + 15,
+                                            TRUE ~ bill_date[n()] + pre_days[n()] + 15) ) %>% 
+  ungroup( idp) %>% 
+  left_join( select( demography, idp, departure_date), by = "idp") %>% 
+  mutate( current_combined_date = pmin( switch_date, discontinuation_date, departure_date)) 
+end.time <- Sys.time()
+end.time - start.time
+
+
+
+
+#==================save=============================================#
+save(On_treatment_codeine_100, file="R_datasets/On_treatment_codeine_100.RData")
+#==================save=============================================#
+
+
+
+  
+
+
+  
+
 # Follow-up periods -------------------------------------------------------
 specific_outcome <- 
   catalog_clear %>% 
@@ -379,153 +443,217 @@ specific_outcome <-
   unlist() %>% 
   unname()
 
-Follow_ATT_whole_func <- function( ){
+names(specific_outcome) <- specific_outcome
+
+set.seed(1)
+On_treatment_codeine<- sample_frac(On_treatment_codeine_100, 0.01)
+
+
+Follow_ATT_whole_func <- function(){
   start.time <- Sys.time()
-  follow_up_dataset <- 
-    baseline_cohort_codeine_100 %>% 
-    select( idp, first_bill_time, first_bill_drug) %>%
-    left_join( select( billing, -billing_agr), by = "idp") %>% 
-    left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
-    rename( Drug_name = English_label) %>% 
-    # filter studied drugs and observation period
-    filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
-    group_by( idp) %>% 
-    arrange( bill_date) %>% 
-    mutate( bill_seq = as.numeric( row_number())) %>% 
+  current_outcome_dataset <-   
+    On_treatment_codeine %>% 
     #==================================================================#
-    # cencored date for switching
-    #==================================================================#
-    mutate( switcher = case_when( any(first_bill_drug != Drug_name) ~ 1,
-                                  TRUE ~ 0),
-            switcher_seq = case_when( first_bill_drug != Drug_name ~ bill_seq,
-                                      TRUE ~ NA_real_),
-            switcher_seq_index = case_when( switcher == 1  ~ min(switcher_seq, na.rm = TRUE) - 1,
-                                            TRUE ~ NA_real_),
-            switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 45,
-                                     TRUE ~ bill_date[n()] + 45)) %>% 
-    #==================================================================#
-    # cencored date for discontinuation 
-    #==================================================================# 
-    mutate( bill_date_diff = bill_date - lag(bill_date, default = first(bill_date))) %>% 
-    mutate( discontinuationer = case_when( any(bill_date_diff > 90 ) ~ 1,
-                                           TRUE ~ 0),
-            discontinuation_seq = case_when( bill_date_diff > 90 ~ bill_seq,
-                                             TRUE ~ NA_real_),
-            discontinuation_index = case_when( discontinuationer == 1  ~ min(discontinuation_seq, na.rm = TRUE) - 1,
-                                               TRUE ~ NA_real_),
-            discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + 45,
-                                              TRUE ~ bill_date[n()] + 45) ) %>% 
-    ungroup( idp) %>% 
-    left_join( select( demography, idp, departure_date), by = "idp") %>% 
-    mutate( cencored_date = pmin( switch_date, discontinuation_date, departure_date)) %>% 
-    
-    #==================================================================#
-    # index for follow-up period (ATT)
+    # index for on-treatment period (current outcome)
     #==================================================================#
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
     left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
     rename( disease_name = English_label, disease_group = variable_group) %>% 
     
-    mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & cencored_date > dia_start_date & disease_group == "outcome" ~ 1,
-                                                  TRUE ~ 0)) %>%
-    group_by( idp) %>%
-    mutate( outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
-                                                   TRUE ~ 0)) %>%
-    
-    arrange( desc(outcome_occur_record), dia_start_date) %>% 
-    mutate( outcome_occur_date = case_when( outcome_occur_subject == 1 ~ dia_start_date[1],
-                                                TRUE ~ as.Date("2017-12-31"))) %>% 
-    ungroup() %>%
-    #==================================================================#
-    # condense
-    #==================================================================#
-    distinct( idp, first_bill_time, outcome_occur_subject, outcome_occur_date, cencored_date) %>%  
-    mutate( combined_date = pmin(outcome_occur_date, cencored_date),
-            follow_up_days  = as.numeric( difftime( combined_date , first_bill_time, units = "days"))) %>%
-    ungroup() %>% 
-    select( idp, outcome_occur_subject, follow_up_days)
-  
-    print( Sys.time() - start.time)
-  return(follow_up_dataset)
-  
-}
-Follow_ATT_specific_func <- function(  serious_outcome){
-  start.time <- Sys.time()
-  follow_up_dataset <- 
-    baseline_cohort_codeine_100 %>% 
-    select( idp, first_bill_time, first_bill_drug) %>%
-    left_join( select( billing, -billing_agr), by = "idp") %>% 
-    left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
-    rename( Drug_name = English_label) %>% 
-    # filter studied drugs and observation period
-    filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
-    group_by( idp) %>% 
-    arrange( bill_date) %>% 
-    mutate( bill_seq = as.numeric( row_number())) %>% 
-    #==================================================================#
-    # cencored date for switching
-    #==================================================================#
-    mutate( switcher = case_when( any(first_bill_drug != Drug_name) ~ 1,
-                                  TRUE ~ 0),
-            switcher_seq = case_when( first_bill_drug != Drug_name ~ bill_seq,
-                                      TRUE ~ NA_real_),
-            switcher_seq_index = case_when( switcher == 1  ~ min(switcher_seq, na.rm = TRUE) - 1,
-                                            TRUE ~ NA_real_),
-            switch_date = case_when( switcher == 1 ~ bill_date[switcher_seq_index] + 45,
-                                     TRUE ~ bill_date[n()] + 45)) %>% 
-    #==================================================================#
-    # cencored date for discontinuation 
-    #==================================================================# 
-    mutate( bill_date_diff = bill_date - lag(bill_date, default = first(bill_date))) %>% 
-    mutate( discontinuationer = case_when( any(bill_date_diff > 90 ) ~ 1,
-                                           TRUE ~ 0),
-            discontinuation_seq = case_when( bill_date_diff > 90 ~ bill_seq,
-                                             TRUE ~ NA_real_),
-            discontinuation_index = case_when( discontinuationer == 1  ~ min(discontinuation_seq, na.rm = TRUE) - 1,
-                                               TRUE ~ NA_real_),
-            discontinuation_date = case_when( discontinuationer == 1  ~ bill_date[discontinuation_index] + 45,
-                                              TRUE ~ bill_date[n()] + 45) ) %>% 
-    ungroup( idp) %>% 
-    left_join( select( demography, idp, departure_date), by = "idp") %>% 
-    mutate( cencored_date = pmin( switch_date, discontinuation_date, departure_date)) %>% 
-    
-    #==================================================================#
-    # index for follow-up period (ATT)
-    #==================================================================#
-    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
-    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
-    rename( disease_name = English_label, disease_group = variable_group) %>% 
-    
-    mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & cencored_date > dia_start_date & disease_name == serious_outcome ~ 1,
+    mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & current_combined_date >= dia_start_date & disease_group == "outcome" ~ 1,
                                               TRUE ~ 0)) %>%
     group_by( idp) %>%
-    mutate( outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
-                                               TRUE ~ 0)) %>%
+    mutate( current_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
+                                                       TRUE ~ 0)) %>%
     
     arrange( desc(outcome_occur_record), dia_start_date) %>% 
-    mutate( outcome_occur_date = case_when( outcome_occur_subject == 1 ~ dia_start_date[1],
-                                            TRUE ~ as.Date("2017-12-31"))) %>% 
+    mutate( current_outcome_occur_date = case_when( current_outcome_occur_subject == 1 ~ dia_start_date[1],
+                                                    TRUE ~ current_combined_date)) %>% 
     ungroup() %>%
     #==================================================================#
     # condense
     #==================================================================#
-    distinct( idp, first_bill_time, outcome_occur_subject, outcome_occur_date, cencored_date) %>%  
-    mutate( combined_date = pmin(outcome_occur_date, cencored_date),
-            follow_up_days  = as.numeric( difftime( combined_date , first_bill_time, units = "days"))) %>%
-    ungroup() %>% 
-    select( idp, outcome_occur_subject, follow_up_days)
+    distinct( idp, first_bill_time, current_outcome_occur_subject, current_outcome_occur_date, current_combined_date, departure_date) %>%  
+    mutate( current_censored_date = pmin(current_outcome_occur_date, current_combined_date),
+            current_follow_up_days  = as.numeric( difftime( current_censored_date , first_bill_time, units = "days"))) %>% 
+    ungroup()  
   
-  print( Sys.time() - start.time)
-  return(follow_up_dataset)
+  recent_outcome_dataset <- 
+    current_outcome_dataset %>% 
+    select( idp, current_outcome_occur_subject, current_outcome_occur_date, current_censored_date, departure_date) %>% 
+    filter( current_outcome_occur_subject ==0) %>% 
+    mutate( recent_combined_date = pmin( current_censored_date + 180, departure_date)) %>% 
+    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = English_label, disease_group = variable_group) %>% 
+    
+    mutate( outcome_occur_record = case_when( dia_start_date > current_censored_date & recent_combined_date  >= dia_start_date & disease_group == "outcome" ~ 1,
+                                              TRUE ~ 0)) %>%
+    group_by( idp) %>%
+    mutate( recent_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
+                                                      TRUE ~ 0)) %>%
+    
+    arrange( desc(outcome_occur_record), dia_start_date) %>% 
+    mutate( recent_outcome_occur_date = case_when( recent_outcome_occur_subject == 1 ~ dia_start_date[1],
+                                                   TRUE ~ recent_combined_date + 180)) %>% 
+    ungroup() %>%
+    #==================================================================#
+    # condense
+    #==================================================================#
+    distinct( idp,  recent_outcome_occur_subject, recent_outcome_occur_date, recent_combined_date, current_censored_date, departure_date) %>%  
+    mutate( recent_censored_date = pmin(recent_outcome_occur_date, recent_combined_date),
+            recent_follow_up_days  = as.numeric( difftime( recent_censored_date , current_censored_date, units = "days"))) %>% 
+    ungroup() 
+  
+  
+  past_outcome_dataset <- 
+    recent_outcome_dataset %>% 
+    select( idp, recent_outcome_occur_subject, recent_outcome_occur_date, recent_censored_date, departure_date) %>% 
+    filter( recent_outcome_occur_subject ==0) %>% 
+    
+    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = English_label, disease_group = variable_group) %>% 
+    
+    mutate( outcome_occur_record = case_when( dia_start_date > recent_censored_date & departure_date  >= dia_start_date & disease_group == "outcome" ~ 1,
+                                              TRUE ~ 0)) %>%
+    group_by( idp) %>%
+    mutate( past_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
+                                                    TRUE ~ 0)) %>%
+    
+    arrange( desc(outcome_occur_record), dia_start_date) %>% 
+    mutate( past_outcome_occur_date = case_when( past_outcome_occur_subject == 1 ~ dia_start_date[1],
+                                                 TRUE ~ departure_date)) %>% 
+    ungroup() %>%
+    #==================================================================#
+    # condense
+    #==================================================================#
+    distinct( idp,  past_outcome_occur_subject, past_outcome_occur_date, recent_censored_date, departure_date) %>%  
+    mutate( past_censored_date = pmin(past_outcome_occur_date, departure_date),
+            past_follow_up_days  = as.numeric( difftime( past_censored_date , recent_censored_date, units = "days"))) %>% 
+    ungroup() 
+  
+  output = list( current_outcome_dataset = select( current_outcome_dataset, idp, current_outcome_occur_subject, current_follow_up_days) %>% 
+                   rename(  outcome_occur_subject = current_outcome_occur_subject, follow_up_days = current_follow_up_days),
+                 
+                 recent_outcome_dataset = select( recent_outcome_dataset, idp, recent_outcome_occur_subject, recent_follow_up_days) %>% 
+                   rename(  outcome_occur_subject = recent_outcome_occur_subject, follow_up_days = recent_follow_up_days),
+                 
+                 past_outcome_dataset = select( past_outcome_dataset, idp, past_outcome_occur_subject, past_follow_up_days) %>% 
+                   rename(  outcome_occur_subject = past_outcome_occur_subject, follow_up_days = past_follow_up_days))
+  output <- bind_rows( output, .id = "group_label")
+  end.time <- Sys.time()
+  print(end.time - start.time)
+  return( output)
+  
+}
+Follow_ATT_specific_func <- function(specific_outcome){
+  start.time <- Sys.time()
+  current_outcome_dataset <-   
+    On_treatment_codeine %>% 
+    #==================================================================#
+    # index for on-treatment period (current outcome)
+    #==================================================================#
+    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = English_label, disease_group = variable_group) %>% 
+    
+    mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & current_combined_date >= dia_start_date & disease_name == specific_outcome ~ 1,
+                                              TRUE ~ 0)) %>%
+    group_by( idp) %>%
+    mutate( current_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
+                                                       TRUE ~ 0)) %>%
+    
+    arrange( desc(outcome_occur_record), dia_start_date) %>% 
+    mutate( current_outcome_occur_date = case_when( current_outcome_occur_subject == 1 ~ dia_start_date[1],
+                                                    TRUE ~ current_combined_date)) %>% 
+    ungroup() %>%
+    #==================================================================#
+    # condense
+    #==================================================================#
+    distinct( idp, first_bill_time, current_outcome_occur_subject, current_outcome_occur_date, current_combined_date, departure_date) %>%  
+    mutate( current_censored_date = pmin(current_outcome_occur_date, current_combined_date),
+            current_follow_up_days  = as.numeric( difftime( current_censored_date , first_bill_time, units = "days"))) %>% 
+    ungroup()  
+  
+  recent_outcome_dataset <- 
+    current_outcome_dataset %>% 
+    select( idp, current_outcome_occur_subject, current_outcome_occur_date, current_censored_date, departure_date) %>% 
+    filter( current_outcome_occur_subject ==0) %>% 
+    mutate( recent_combined_date = pmin( current_censored_date + 180, departure_date)) %>% 
+    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = English_label, disease_group = variable_group) %>% 
+    
+    mutate( outcome_occur_record = case_when( dia_start_date > current_censored_date & recent_combined_date  >= dia_start_date & disease_name == specific_outcome ~ 1,
+                                              TRUE ~ 0)) %>%
+    group_by( idp) %>%
+    mutate( recent_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
+                                                      TRUE ~ 0)) %>%
+    
+    arrange( desc(outcome_occur_record), dia_start_date) %>% 
+    mutate( recent_outcome_occur_date = case_when( recent_outcome_occur_subject == 1 ~ dia_start_date[1],
+                                                   TRUE ~ recent_combined_date + 180)) %>% 
+    ungroup() %>%
+    #==================================================================#
+    # condense
+    #==================================================================#
+    distinct( idp,  recent_outcome_occur_subject, recent_outcome_occur_date, recent_combined_date, current_censored_date, departure_date) %>%  
+    mutate( recent_censored_date = pmin(recent_outcome_occur_date, recent_combined_date),
+            recent_follow_up_days  = as.numeric( difftime( recent_censored_date , current_censored_date, units = "days"))) %>% 
+    ungroup() 
+  
+  
+  past_outcome_dataset <- 
+    recent_outcome_dataset %>% 
+    select( idp, recent_outcome_occur_subject, recent_outcome_occur_date, recent_censored_date, departure_date) %>% 
+    filter( recent_outcome_occur_subject ==0) %>% 
+    
+    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
+    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = English_label, disease_group = variable_group) %>% 
+    
+    mutate( outcome_occur_record = case_when( dia_start_date > recent_censored_date & departure_date  >= dia_start_date & disease_name == specific_outcome ~ 1,
+                                              TRUE ~ 0)) %>%
+    group_by( idp) %>%
+    mutate( past_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
+                                                    TRUE ~ 0)) %>%
+    
+    arrange( desc(outcome_occur_record), dia_start_date) %>% 
+    mutate( past_outcome_occur_date = case_when( past_outcome_occur_subject == 1 ~ dia_start_date[1],
+                                                 TRUE ~ departure_date)) %>% 
+    ungroup() %>%
+    #==================================================================#
+    # condense
+    #==================================================================#
+    distinct( idp,  past_outcome_occur_subject, past_outcome_occur_date, recent_censored_date, departure_date) %>%  
+    mutate( past_censored_date = pmin(past_outcome_occur_date, departure_date),
+            past_follow_up_days  = as.numeric( difftime( past_censored_date , recent_censored_date, units = "days"))) %>% 
+    ungroup() 
+  
+  output = list( current_outcome_dataset = select( current_outcome_dataset, idp, current_outcome_occur_subject, current_follow_up_days) %>% 
+                   rename(  outcome_occur_subject = current_outcome_occur_subject, follow_up_days = current_follow_up_days),
+                 
+                 recent_outcome_dataset = select( recent_outcome_dataset, idp, recent_outcome_occur_subject, recent_follow_up_days) %>% 
+                   rename(  outcome_occur_subject = recent_outcome_occur_subject, follow_up_days = recent_follow_up_days),
+                 
+                 past_outcome_dataset = select( past_outcome_dataset, idp, past_outcome_occur_subject, past_follow_up_days) %>% 
+                   rename(  outcome_occur_subject = past_outcome_occur_subject, follow_up_days = past_follow_up_days))
+  end.time <- Sys.time()
+  print(end.time - start.time)
+  output <- bind_rows( output, .id = "group_label")
+  
+  return( output)
   
 }
 
-ATT_whole_codeine <- Follow_ATT_whole_func()
-ATT_specific_codeine <- lapply( specific_outcome, Follow_ATT_specific_func) 
-names(ATT_specific_codeine) <- specific_outcome
-ATT_combined_codeine <- list(ATT_whole_codeine, ATT_specific_codeine)
 
-ATT_specific_dataframe <- bind_rows( ATT_specific, .id = "group_label")
+ATT_whole_codeine <- Follow_ATT_whole_func()
+ATT_specific_codeine <- plyr::llply( specific_outcome, Follow_ATT_specific_func) 
+
+ATT_specific_codeine$whole <- ATT_whole_codeine
+
+ATT_combined_codeine_dataframe <- bind_rows( ATT_specific_codeine, .id = "outcome_label")
 
 
 #==================save=============================================#
@@ -600,21 +728,17 @@ Follow_ITT_specific_func <- function( serious_outcome){
 
 ITT_whole_codeine <- Follow_ITT_whole_func()
 ITT_specific_codeine <- lapply( specific_outcome, Follow_ITT_specific_func) 
-names(ITT_specific_codeine) <- specific_outcome
 
+names(ITT_specific_codeine) <- specific_outcome
 ITT_specific_codeine$whole <- ITT_whole_codeine
+
 ITT_combined_codeine_dataframe <- bind_rows( ITT_specific_codeine, .id = "group_label")
 
 #==================save=============================================#
-save(ITT_combined_codeine_dataframe, file="R_datasets/ITT_combined_codeine_dataframe.RData")
+# save(ITT_combined_codeine_dataframe, file="R_datasets/ITT_combined_codeine_dataframe.RData")
 #==================save=============================================#
   
 
-sapply(follow_up_dateset_1, function(x)sum(is.na(x)))
-
-
-# save(follow_up_dataset_ATT_100, file="R_datasets/follow_up_dataset_ATT_100.RData")
-# save(follow_up_dataset_ITT_100, file="R_datasets/follow_up_dataset_ITT_100.RData")
  
 # Missing data imputation -------------------------------------------------
 
@@ -739,27 +863,27 @@ mathched_cohort_codine_100 <-
   filter( row_number() %in% index)
 
 # Calculate statistics ( mean follow up, rate, crude HR) ------------------------------------------
-cox_dataset_ITT <- 
+cox_dataset_ATT <- 
   mathched_cohort_codine_100 %>% 
-  left_join(follow_up_dataset_ATT_100, by = "idp")
+  left_join(ATT_combined_codeine_dataframe, by = "idp")
 
 
 summary_table_func <- function( inputdata){
  summary_table <- 
   inputdata %>% 
-  group_by( first_bill_drug) %>% 
+  group_by( outcome_label, group_label,first_bill_drug) %>% 
   summarise(n = n(), 
             mean_age = mean( initiation_age), 
             events = sum( outcome_occur_subject), 
             mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
-  ungroup() %>% 
+  group_by(outcome_label, group_label) %>% 
   mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
   mutate( ratio = rate[2] / rate[1]) 
  
  return(summary_table)
 }
 
-summary_table_func( inputdata = cox_dataset_ITT)
+bb <- summary_table_func( inputdata = cox_dataset_ATT)
 
 # Cox-model ---------------------------------------------------------------
 cox_model <- coxph( Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug ,
@@ -779,14 +903,14 @@ names(cox_dataset)
 # Cox-model stratification ------------------------------------------------
 cox_dataset <- 
   mathched_cohort_codine_100 %>% 
-  left_join(ITT_combined_codeine_dataframe, by = "idp") 
+  left_join(ATT_combined_codeine_dataframe, by = "idp") 
 
 
 
 table(cox_dataset$group_label)
 
 
-res.separate <- lapply( split(cox_dataset, cox_dataset$group_label),
+res.separate <- lapply( split(cox_dataset, list(cox_dataset$outcome_label, cox_dataset$group_label)),
                         FUN = function(DF) {
                            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
                                   first_bill_drug ,
@@ -809,7 +933,7 @@ aa <- sapply(res.separate,function(x){
                           names(res)<-c( "estimate", "stderr", "lower", "upper")
                           return(res)
                           #return(exp(cbind(coef(x),confint(x)))) 
-                          }) %>% 
+                          })  %>% 
   t() %>% 
   as.data.frame() %>% 
   rownames_to_column() %>% 
