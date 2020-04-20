@@ -51,7 +51,7 @@ library(extrafont) #font
 # library(labeling)
 library(readr)
 library(tidyr)
-# library(stringr)
+library(stringr)
 library(xlsx)
 # library(naniar)
 # library(visdat)
@@ -66,6 +66,7 @@ library(optmatch)
 library(mice)
 library(lattice)
 library(cobalt)
+
 # library(fastDummies)
 
 getwd()
@@ -93,8 +94,9 @@ catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xls
 #prepared datasets
 load("R_datasets/Final_cohort_codeine_100.RData")
 load("R_datasets/baseline_cohort_codeine_100.RData")
-
+load("R_datasets/baseline_cohort_codeine_100_imputation.RData")
 load("R_datasets/PS_model_codeine_100.RData")
+load("R_datasets/ATT_combined_codeine_dataframe.RData")
 
 # load("R_datasets/follow_up_dateset.RData")
 
@@ -452,7 +454,7 @@ On_treatment_codeine<- sample_frac(On_treatment_codeine_100, 0.01)
 Follow_ATT_whole_func <- function(){
   start.time <- Sys.time()
   current_outcome_dataset <-   
-    On_treatment_codeine %>% 
+    On_treatment_codeine_100 %>% 
     #==================================================================#
     # index for on-treatment period (current outcome)
     #==================================================================#
@@ -550,7 +552,7 @@ Follow_ATT_whole_func <- function(){
 Follow_ATT_specific_func <- function(specific_outcome){
   start.time <- Sys.time()
   current_outcome_dataset <-   
-    On_treatment_codeine %>% 
+    On_treatment_codeine_100 %>% 
     #==================================================================#
     # index for on-treatment period (current outcome)
     #==================================================================#
@@ -657,7 +659,7 @@ ATT_combined_codeine_dataframe <- bind_rows( ATT_specific_codeine, .id = "outcom
 
 
 #==================save=============================================#
-# save(ATT_specific, file="R_datasets/ATT_specific.RData")
+save(ATT_combined_codeine_dataframe, file="R_datasets/ATT_combined_codeine_dataframe.RData")
 #==================save=============================================#
 
 Follow_ITT_whole_func <- function( ){
@@ -794,7 +796,7 @@ PS_model_codeine_100 <- matchit( reformulate(termlabels = covariates, response =
                                   ratio=1,
                                   data = PS_model_dataset)
 #==================save=============================================#
-save(PS_model_codeine_100, file="R_datasets/PS_model_codeine_100.RData")
+# save(PS_model_codeine_100, file="R_datasets/PS_model_codeine_100.RData")
 #==================save=============================================#
 
 #==================================================================#
@@ -862,28 +864,6 @@ mathched_cohort_codine_100 <-
   PS_model_dataset %>% 
   filter( row_number() %in% index)
 
-# Calculate statistics ( mean follow up, rate, crude HR) ------------------------------------------
-cox_dataset_ATT <- 
-  mathched_cohort_codine_100 %>% 
-  left_join(ATT_combined_codeine_dataframe, by = "idp")
-
-
-summary_table_func <- function( inputdata){
- summary_table <- 
-  inputdata %>% 
-  group_by( outcome_label, group_label,first_bill_drug) %>% 
-  summarise(n = n(), 
-            mean_age = mean( initiation_age), 
-            events = sum( outcome_occur_subject), 
-            mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
-  group_by(outcome_label, group_label) %>% 
-  mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
-  mutate( ratio = rate[2] / rate[1]) 
- 
- return(summary_table)
-}
-
-bb <- summary_table_func( inputdata = cox_dataset_ATT)
 
 # Cox-model ---------------------------------------------------------------
 cox_model <- coxph( Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug ,
@@ -901,16 +881,12 @@ summary(cox_model)
 names(cox_dataset)
 
 # Cox-model stratification ------------------------------------------------
-cox_dataset <- 
+cox_dataset_ATT <- 
   mathched_cohort_codine_100 %>% 
   left_join(ATT_combined_codeine_dataframe, by = "idp") 
 
 
-
-table(cox_dataset$group_label)
-
-
-res.separate <- lapply( split(cox_dataset, list(cox_dataset$outcome_label, cox_dataset$group_label)),
+res.separate <- lapply( split(cox_dataset_ATT, list(cox_dataset_ATT$outcome_label, cox_dataset_ATT$group_label)),
                         FUN = function(DF) {
                            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
                                   first_bill_drug ,
@@ -918,27 +894,60 @@ res.separate <- lapply( split(cox_dataset, list(cox_dataset$outcome_label, cox_d
                        })
 
 
-
-aa <- sapply(res.separate,function(x){ 
+survial_hazard <- sapply(res.separate,function(x){ 
                           dt <- summary(x)
-                          p.value<-signif(dt$wald["pvalue"], digits=2)
+                          # p.value<-signif(dt$wald["pvalue"], digits=2)
                           # wald.test<-signif(x$wald["test"], digits=3)
                           # beta<-signif(x$coef[1], digits=3);#coeficient beta
                           sd <- signif(dt$coef[3], digits=3);
-                          HR <-signif(dt$coef[2], digits=3);#exp(beta)
-                          HR.confint.lower <- signif(dt$conf.int[,"lower .95"], 3)
-                          HR.confint.upper <- signif(dt$conf.int[,"upper .95"],3)
-                          # HR <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
+                          HR <-dt$coef[2];#exp(beta)
+                          HR.confint.lower <-dt$conf.int[,"lower .95"]
+                          HR.confint.upper <- dt$conf.int[,"upper .95"]
+                          # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
                           res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
                           names(res)<-c( "estimate", "stderr", "lower", "upper")
                           return(res)
                           #return(exp(cbind(coef(x),confint(x)))) 
-                          })  %>% 
+                          }) %>% 
   t() %>% 
-  as.data.frame() %>% 
-  rownames_to_column() %>% 
-  rename( variable = rowname)
+  as_tibble(rownames = NA) %>% 
+  tibble::rownames_to_column() %>% 
+  rename( variable = rowname) %>% 
+  mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
+                     substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
+                     substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))
 
+
+
+# Calculate statistics ( mean follow up, rate, crude HR) ------------------------------------------
+
+summary_table_func <- function( inputdata){
+  summary_table <- 
+    inputdata %>% 
+    group_by( outcome_label, group_label, first_bill_drug) %>% 
+    summarise(n = n(), 
+              mean_age = mean( initiation_age), 
+              events = sum( outcome_occur_subject), 
+              mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
+    group_by(outcome_label, group_label) %>% 
+    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
+    mutate( ratio = rate[2] / rate[1]) %>% 
+    
+    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
+     mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2))
+  
+   
+  return(summary_table)
+}
+
+
+survial_event <- summary_table_func( inputdata = cox_dataset_ATT)
+
+survial_summary <- 
+  filter( survial_event, first_bill_drug ==0) %>% 
+  left_join( filter( survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
+  mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
+  left_join( survial_hazard, by = "variable")
 
 
 # Forest plot -------------------------------------------------------------
