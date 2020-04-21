@@ -808,7 +808,7 @@ PS_model_codeine_100 <- matchit( reformulate(termlabels = covariates, response =
 #==================================================================#
 # diagnostic of propensity score matching 
 #==================================================================#
-# summary(PS_model, standardize=TRUE)
+summary(PS_model_codeine_100)
 sd_data <- bal.tab(PS_model_codeine_100, binary = "std", un = TRUE)
 sd_data
 #==================================================================#
@@ -869,7 +869,6 @@ Distribution_after_matching
 mathched_cohort_codine_100 <- 
   PS_model_dataset %>% 
   filter( row_number() %in% index)
-
 
 # Cox-model ---------------------------------------------------------------
 cox_dataset <- 
@@ -1201,5 +1200,7 @@ ggsave(filename = "Distribution_after_matching.png",
 
 
 
+
+#
 
 #
