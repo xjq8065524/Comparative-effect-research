@@ -871,11 +871,11 @@ mathched_cohort_codine_100 <-
   PS_model_dataset %>% 
   filter( row_number() %in% index)
 
+
 # Cox-model ---------------------------------------------------------------
 cox_dataset <- 
   mathched_cohort_codine_100 %>% 
   left_join(ATT_whole_codeine, by = "idp") 
-
 
 cox_model <- coxph( Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug ,
                     data =  cox_dataset)
@@ -891,10 +891,13 @@ summary(cox_model)
 
 names(cox_dataset)
 
+
 # Cox-model outcome stratification ------------------------------------------------
+
 cox_dataset_ATT <- 
   mathched_cohort_codine_100 %>% 
   left_join(ATT_combined_codeine_dataframe, by = "idp") 
+
 
 
 res.separate_func <- function(input){
@@ -1059,9 +1062,11 @@ summary_table_func <- function( inputdata){
 survial_event <- summary_table_func( inputdata = cox_dataset_interaction)
 
 
+
 # #==================================================================#
 # # combine all statistics 
 # #==================================================================#
+
 
 survial_summary <- 
   filter( survial_event, first_bill_drug ==0) %>% 

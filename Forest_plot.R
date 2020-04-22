@@ -3,6 +3,7 @@ library(forestplot)
 forest <- 
   survial_summary %>% 
   ungroup() %>% 
+
   add_row( outcome_label = c(unique(survial_summary$outcome_label))) %>% 
   mutate( outcome_label = factor( outcome_label, 
                                   levels = c("constipation", "sleep_disorders", "delirium", "opioid_abuse", "cardiac_arrhythmia", "falls", "fracturas", "all_cause_mortality", "whole" ),
@@ -55,6 +56,7 @@ tiff(file = 'Figures/forestplot.tiff',
     height = 17,
     compression = "lzw",
     res = 300) 
+
 forestplot(tabletext, 
            graph_data,
            new_page = TRUE,
@@ -93,11 +95,6 @@ a <- list(gpar( fontfamily = "Arial", cex = c(0.9)),
 
 
 a <- c(rep(TRUE,3), rep(FALSE,36))
-
-
-
-##
-
 
 
 
