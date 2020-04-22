@@ -34,6 +34,7 @@ graph_data <-
     upper = c(NA, NA, NA, as.numeric(forest$upper))),
     .Names = c("mean", "lower", "upper"), 
     row.names = c(NA, -47L), 
+
     class = "data.frame")
 
 
@@ -59,6 +60,7 @@ tiff(file = 'Figures/forestplot_add_outcomes_same_sample.tiff',
     height = 20,
     compression = "lzw",
     res = 300)
+
 
 forestplot(tabletext, 
            graph_data,
@@ -90,12 +92,6 @@ forestplot(tabletext,
            xlog=TRUE)
 
 dev.off()
-
-
-
-
-
-
 
 
 # ATT and intention combined -----------------------------------------------------
@@ -188,4 +184,5 @@ forestplot(tabletext,
            xlog=TRUE)
 
 dev.off()
+
 

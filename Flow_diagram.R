@@ -96,6 +96,7 @@ catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xls
 # load("R_datasets/baseline_cohort_codeine_100.RData")
 load("R_datasets/baseline_cohort_codeine_100_imputation.RData")
 load("R_datasets/PS_model_codeine_100.RData")
+
 load("R_datasets/On_treatment_codeine_add_outcome_100.RData")
 load("R_datasets/ATT_combined_add_outcome_codeine_dataframe.RData")
 load("R_datasets/Itention_combined_add_outcome_codeine_dataframe.RData")
@@ -661,8 +662,6 @@ ATT_combined_add_outcome_codeine_dataframe <- bind_rows( ATT_specific_codeine, .
 #==================intention-to-treatment analysis=============================================#
 #==================intention-to-treatment analysis=============================================#
 
-
-
 Follow_intention_phase_whole_func <- function(){
   start.time <- Sys.time()
   current_outcome_dataset <-   
@@ -1084,6 +1083,7 @@ cox_dataset <-
   left_join(ATT_combined_add_outcome_codeine_dataframe, by = "idp") %>% 
   filter( !is.na(outcome_label))
 
+
 cox_model <- coxph( Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug ,
                     data =  cox_dataset)
 summary(cox_model)
@@ -1099,12 +1099,14 @@ summary(cox_model)
 names(cox_dataset)
 
 
+
 # Cox-model outcome stratification (ATT) ------------------------------------------------
 
 cox_dataset_ATT <- 
   mathched_cohort_codine_100 %>% 
   left_join(ATT_combined_add_outcome_codeine_dataframe, by = "idp") %>% 
   filter( !is.na(outcome_label))
+
 
 res.separate_func <- function(input){
   lapply( split(input, list(input$outcome_label, input$group_label)),
