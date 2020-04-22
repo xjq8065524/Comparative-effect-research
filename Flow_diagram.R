@@ -76,6 +76,7 @@ load("D:/DPhil/Project_Opioid_use/Data/billing.RData")
 # attention: which diagnosis dataset is used
 load("D:/DPhil/Project_Opioid_use/Data/diagnosis_complete.RData")
 diagnosis <- diagnosis_complete
+rm(diagnosis_complete)
 load("D:/DPhil/Project_Opioid_use/Data/demography.RData")
 load("D:/DPhil/Project_Opioid_use/Data/social_variables.RData")
 load("D:/DPhil/Project_Opioid_use/Data/clinical_variables.RData")
@@ -230,7 +231,7 @@ nrow(study_population_stage2_codeine)
 
 # Finial cohort -----------------------------------------------------------
 
-Final_cohort_codeine_100 <- 
+Final_cohort_codeine_add_outcome_100 <- 
   study_population_stage2_codeine %>% 
   #==================================================================#
   # Continuous enrolment in the database < 1 year before the entry date 
@@ -258,17 +259,17 @@ Exclusion_summary <-
              with_outcome = sum(history_outcomes == 1))
   
 
-# save(Final_cohort_codeine_100, file="R_datasets/Final_cohort_codeine_100.RData")
+# save(Final_cohort_codeine_add_outcome_100, file="R_datasets/Final_cohort_codeine_add_outcome_100.RData")
 
-set.seed(1)
-Final_cohort_codeine_100 <- sample_frac(Final_cohort_codeine_100, 0.1)
-str(Final_cohort_codeine)
+# set.seed(1)
+# Final_cohort_codeine_100 <- sample_frac(Final_cohort_codeine_100, 0.1)
+# str(Final_cohort_codeine)
 
 
 
 # Link to other baseline variables ----------------------------------------
-baseline_cohort_codeine_100 <- 
-  Final_cohort_codeine_100 %>% 
+baseline_cohort_codeine_add_outcome_100 <- 
+  Final_cohort_codeine_add_outcome_100 %>% 
   left_join( social_variables, by = "idp") %>%
   left_join( BMI_dataset, by = "idp") %>%
   # 
@@ -373,7 +374,7 @@ baseline_cohort_codeine_100 <-
   # transform from long to wide data
   spread(commorbidity_label, commorbidities_index_records, fill = 0)
   
-save(baseline_cohort_codeine_100, file="R_datasets/baseline_cohort_codeine_100.RData")
+# save(baseline_cohort_codeine_add_outcome_100, file="R_datasets/baseline_cohort_codeine_add_outcome_100.RData")
 
 
 
@@ -384,8 +385,8 @@ save(baseline_cohort_codeine_100, file="R_datasets/baseline_cohort_codeine_100.R
 # baseline_cohort_codeine<- sample_frac(baseline_cohort_codeine_100, 0.1)
 
 start.time <- Sys.time()
-On_treatment_codeine_100 <- 
-  baseline_cohort_codeine_100 %>% 
+On_treatment_codeine_add_outcome_100 <- 
+  baseline_cohort_codeine_add_outcome_100 %>% 
   select( idp, first_bill_time, first_bill_drug) %>%
   left_join( select( billing, -billing_agr), by = "idp") %>% 
   left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
@@ -431,7 +432,7 @@ end.time - start.time
 
 
 #==================save=============================================#
-save(On_treatment_codeine_100, file="R_datasets/On_treatment_codeine_100.RData")
+save(On_treatment_codeine_add_outcome_100, file="R_datasets/On_treatment_codeine_add_outcome_100.RData")
 #==================save=============================================#
 
 
