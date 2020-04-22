@@ -1198,4 +1198,3 @@ ggsave(filename = "Distribution_after_matching.png",
        dpi = 300,
        type = "cairo")
 
-
