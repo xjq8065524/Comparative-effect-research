@@ -51,7 +51,7 @@ getwd()
 setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety/R codes/Comparative-effect-research")
 # load raw and label datasets -------------------------------------------------------
 load("D:/DPhil/Project_Opioid_use/Data/billing.RData")
-load("R_datasets/pattern_cod_tra_stage3.RData")
+load("R_datasets/pattern_cod_tra_stage4.RData")
 
 Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_poblacio_denominadors_20191219_143606.txt", 
                                delim = "|",
@@ -71,8 +71,6 @@ sapply(billing, function(x)sum(is.na(x)))
 
 #make sure there is no duplicate (no duplicate row)
 check_dup <- distinct(billing, idp, billing_cod, bill_date, .keep_all = TRUE)
-
-
 
 # Number of dispensation each person --------------------------------------
 set.seed(1)

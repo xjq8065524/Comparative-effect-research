@@ -425,12 +425,12 @@ on_treatment_period <- function(input_dataset ){
   return( output_dataset)
 }
 
-aa <- on_treatment_period(input_dataset = baseline_test)
+On_treatment_codeine_add_outcome_100 <- on_treatment_period(input_dataset = baseline_cohort_codeine_add_outcome_100)
 
 
 
 #==================save=============================================#
-# save(On_treatment_codeine_add_outcome_100, file="R_datasets/On_treatment_codeine_add_outcome_100.RData")
+save(On_treatment_codeine_add_outcome_100, file="R_datasets/On_treatment_codeine_add_outcome_100.RData")
 #==================save=============================================#
 
 # Medication Possession Ratio (MPR) ---------------------------------------------

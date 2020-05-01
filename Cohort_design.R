@@ -324,15 +324,8 @@ save(stage_three_saved_data, file="R_datasets/stage_three_saved_data.RData")
 
 
 
-
   
-  
-  sapply(bb, function(x)sum(is.na(x)))
 
-  
-table(bb$BMI_value, useNA = "always")
-
-?table()
 
 
 

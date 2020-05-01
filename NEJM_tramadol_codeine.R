@@ -29,6 +29,7 @@ install.packages('devtools')
 install.packages("fastDummies")
 install.packages("cobalt")
 install.packages( "survivalAnalysis")
+install.packages( "comorbidity")
 devtools::install_github('neilstats/ckbplotr')
 
 
@@ -68,7 +69,7 @@ library(mice)
 library(lattice)
 library(cobalt)
 library(survivalAnalysis)
-
+library( comorbidity)
 # library(fastDummies)
 
 getwd()
@@ -83,24 +84,23 @@ load("D:/DPhil/Project_Opioid_use/Data/demography.RData")
 load("D:/DPhil/Project_Opioid_use/Data/social_variables.RData")
 load("D:/DPhil/Project_Opioid_use/Data/clinical_variables.RData")
 load("D:/DPhil/Project_Opioid_use/Data/admission.RData")
-Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_poblacio_denominadors_20191219_143606.txt", 
-                               delim = "|",
-                               col_names = TRUE)
+# Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_poblacio_denominadors_20191219_143606.txt",
+#                                delim = "|",
+#                                col_names = TRUE)
 
 #dictionary datasets
-catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Notes/catalog_clear.xlsx") %>% 
-                 filter( agr != "CCI" ) %>% 
+catalog_clear <- read_excel("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety/R codes/Comparative-effect-research/Excel/catalog_clear_codeine_tramadol.xlsx") %>% 
                  filter( cod_type != "farmacs_prescrits") #important filter, otherwise some row would be duplicated when linked
 
 #prepared datasets
 # load("R_datasets/Final_cohort_codeine_100.RData")
-load("R_datasets/baseline_cohort_codeine_add_outcome_100.RData")
-load("R_datasets/baseline_cohort_codeine_add_outcome_100_imputation.RData")
-load("R_datasets/PS_model_codeine_add_outcome_100.RData")
-
-load("R_datasets/On_treatment_codeine_add_outcome_100.RData")
-load("R_datasets/ATT_combined_add_outcome_codeine_dataframe.RData")
-load("R_datasets/Intention_combined_add_outcome_codeine_dataframe.RData")
+# load("R_datasets/baseline_cohort_codeine_add_outcome_100.RData")
+# load("R_datasets/baseline_cohort_codeine_add_outcome_100_imputation.RData")
+# load("R_datasets/PS_model_codeine_add_outcome_100.RData")
+# 
+# load("R_datasets/On_treatment_codeine_add_outcome_100.RData")
+# load("R_datasets/ATT_combined_add_outcome_codeine_dataframe.RData")
+# load("R_datasets/Intention_combined_add_outcome_codeine_dataframe.RData")
 
 # Little explore with raw dta ---------------------------------------------
 head(billing)
@@ -125,6 +125,153 @@ BMI_dataset <-
   clinical_variables %>% 
   filter(clinical_agr == "IMC") %>% 
   select(-clinical_cod)
+
+# baseline covariates preparation -----------------------------------------
+set.seed(1)
+sub_Denominator <- sample_frac(Denominator_data, 0.1)
+
+First_billing_dataset <- 
+  sub_Denominator %>% 
+  select( idp) %>% 
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label) %>% 
+  # filter studied drugs and observation period
+  filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+  arrange( bill_date) %>% 
+  group_by( idp) %>%
+  mutate( seq = row_number(), total_seq = n()) %>% # create two index
+  mutate( first_bill_time = bill_date[1], first_bill_drug = Drug_name[1]) %>% 
+  ungroup() %>% 
+  # filter (select one billing record for each person)
+  filter( seq == 1) %>% 
+  ungroup()  
+
+#===========================================================================#
+# Demographic variables, Age(age group), sex, economic levels, residence areas
+#============================================================================#
+Baseline_Demographic_dataset <- 
+  First_billing_dataset %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( demography, by = "idp") %>% 
+  left_join( social_variables, by = "idp") %>% 
+  mutate( economic_level = case_when(economic_level == "" ~ "Ms",
+                                    TRUE ~ economic_level),
+          rural = case_when(rural == "" ~ "Ms",
+                           TRUE ~ rural)) %>% 
+  mutate( initiation_age = as.numeric( difftime(first_bill_time, date_of_birth, units = "days")/365 )) %>% 
+  mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
+                                 initiation_age >= 40 & initiation_age < 60 ~ "40-59",
+                                 initiation_age >= 60 & initiation_age < 80 ~ "60-79",
+                                 initiation_age >= 80  ~ ">=80",
+                                 TRUE ~ "<18")) %>% 
+  mutate( sex = factor( sex, levels = c( "D", "H")),
+          rural = factor( rural, levels = c( "U", "R", "Ms")),
+          economic_level = factor( economic_level, levels = c( "U1", "U2", "U3", "U4", "U5", "Ms")),
+          age_group = factor( age_group, levels = c( "18-39", "40-59", "60-79", ">=80", "<18"))) %>% 
+  select( -first_bill_time, -date_of_birth, -entry_date, -situacio, -departure_date)
+  
+table(Baseline_Demographic_dataset$age_group)
+#===========================================================================#
+# lifestyle factors, BMI, smoking, drinking (looking back period: 2 years)
+#============================================================================#
+Baseline_Lefestyle_dataset <- 
+  First_billing_dataset %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( filter(clinical_variables, clinical_agr == "IMC"), by = "idp") %>% 
+  arrange( desc(clinical_date)) %>% 
+  mutate( BMI_index_records = case_when( clinical_date <= first_bill_time & clinical_date >= (first_bill_time - 365*3) ~ 1,
+                                       TRUE ~ 0)) %>% 
+  group_by(idp) %>%
+  summarise( BMI_value = case_when(any(BMI_index_records == 1) ~ val[1],
+                                TRUE ~ NA_real_)) %>% 
+  ungroup() %>% 
+  mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
+                                 BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
+                                 BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
+                                 BMI_value >= 30  ~ "Obese",
+                                 TRUE ~ "Ms"))
+
+
+sapply(Baseline_Lefestyle_dataset, function(x)sum(is.na(x)/length(x)))
+
+#===========================================================================#
+# medical conditions, previous years
+#============================================================================#
+Baseline_medical_condition_dataset <- 
+  First_billing_dataset %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( check_dup_diagnosis, by = "idp") %>% 
+  left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+  rename( disease_name = English_label, disease_group = variable_group) %>% 
+  # index for eligiable records of history of other disease
+  mutate( commorbidities_index_records = case_when( dia_start_date <= first_bill_time & disease_group == "baseline"  ~ 1,
+                                                    TRUE ~ 0)) %>%
+  # replace unnecessary disease label with Other_or_non_commorbidities
+  mutate( commorbidity_label = case_when(commorbidities_index_records == 1 ~ disease_name,
+                                         TRUE ~ "Other_or_non_commorbidities")) %>%
+  distinct(idp, commorbidity_label, commorbidities_index_records) %>% 
+  spread(commorbidity_label, commorbidities_index_records, fill = 0)
+
+sapply(Baseline_medical_condition_dataset[,-1], function(x)sum(x)/length(x)*100)
+
+#===========================================================================#
+# medication, previous one years
+#============================================================================#
+Baseline_medication_dataset <- 
+  First_billing_dataset %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( select( billing, -billing_agr), by = "idp") %>% 
+  left_join( select( catalog_clear, cod, English_label, variable_group), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label, Drug_group = variable_group) %>% 
+  # index for eligiable records of history of other medications
+  mutate( medication_index_records = case_when( bill_date <= first_bill_time & bill_date >= first_bill_time - 365 & Drug_group == "baseline"  ~ 1,
+                                                    TRUE ~ 0)) %>%
+  # replace unnecessary disease label with Other_or_non_medications
+  mutate( medication_label = case_when(medication_index_records == 1 ~ Drug_name,
+                                         TRUE ~ "Other_drug")) %>%
+  distinct(idp, medication_label, medication_index_records) %>% 
+  spread( medication_label, medication_index_records, fill = 0) 
+  
+
+sapply(Baseline_medication_dataset[,-1], function(x)sum(x)/length(x)*100)
+
+
+#===========================================================================#
+# health_utilisation, previous one years
+#============================================================================#
+Baseline_health_utilisation_dataset <- 
+  First_billing_dataset %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( select( admission, idp, admission_cod, admission_date), by = "idp") %>% 
+
+  mutate( admission_index_records_10999 = case_when( admission_date <= first_bill_time & admission_date >= first_bill_time - 365  & admission_cod == 10999 ~ 1,
+                                                     TRUE ~ 0)) %>%
+  mutate( admission_index_records_30999 = case_when( admission_date <= first_bill_time & admission_date >= first_bill_time - 365  & admission_cod == 30999 ~ 1,
+                                                     TRUE ~ 0)) %>%
+  group_by(idp) %>%
+  summarise( admission_times_10999 = sum(admission_index_records_10999),
+             admission_times_30999 = sum(admission_index_records_30999)) %>% 
+  ungroup() %>% 
+  rename( GP_visits = admission_times_10999, HP_admissions = admission_times_30999)
+  
+#===========================================================================#
+# Charlson comorbidity index 
+#============================================================================#
+Baseline_CCI_dataset <- 
+  First_billing_dataset %>% 
+  select( idp, first_bill_time) %>% 
+  left_join( check_dup_diagnosis, by = "idp") %>%  
+  filter(  dia_start_date <= first_bill_time) %>% 
+  # right_join to keep whole population
+  right_join( select( First_billing_dataset, idp), by = "idp") %>% 
+  select( idp, dia_cod) %>% 
+  rename(  code =dia_cod) %>% 
+  comorbidity( id = "idp", code = "code", score = "charlson", assign0 = FALSE) %>% 
+  select( idp, wscore, windex)
+
+table(Baseline_CCI_dataset$wscore)
+
 
 # database population -----------------------------------------------------
 set.seed(1)
