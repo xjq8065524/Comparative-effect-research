@@ -51,7 +51,7 @@ library(extrafont) #font
 # library(finalfit)
 # library(gridExtra)  #masking  'package:dplyr'  combine
 library(rms)
-library(table1)
+library(tableone)
 
 getwd()
 setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety/R codes/Comparative-effect-research")
@@ -72,75 +72,102 @@ Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_
 #derived datasets
 load("R_datasets/stage_two_saved_data.RData")
 # Baseline table one ----------------------------------------------------------
+
+
 # data preparation including label, unit, format etc.
 
 #first check the missing value of each variable
-sapply(stage_three_saved_data, function(x)sum(is.na(x)))
 
+sapply(Base_new_user_cohort_imputed, function(x)sum(is.na(x)))
 
-
-table_stage_three_saved_data <- 
-  stage_three_saved_data %>% 
-  mutate( first_drug = factor( first_drug, 
-                               levels=c("tramadol","celecoxib"),
-                               labels=c("Tramadol", "Celecoxib"))) %>% 
-  mutate( sex = factor( sex, 
-                        levels=c("H","D"),
-                        labels=c("Male", "Female"))) %>% 
-  mutate( economic_level = factor( economic_level, 
-                           levels=c("U1", "U2", "U3", "U4", "U5"),
-                           labels=c("U1", "U2", "U3", "U4", "U5"))) %>% 
-  mutate( rural = factor( rural, 
-                          levels=c("R", "U"),
-                          labels=c("Rural", "Urban"))) %>% 
-  rename( Alzheimer_disease = "Alzheimer disease") %>% 
-  mutate( Alzheimer_disease = factor( Alzheimer_disease, 
-                          levels=c(1),
-                          labels=c("Yes"))) %>% 
-  rename( Cancer = "Cancer") %>% 
-  mutate( Cancer = factor( Cancer, 
-                          levels=c(1),
-                          labels=c("Yes")))
-
-  
+Before_match_cohort <- 
+  Base_new_user_cohort_probability %>% 
+  mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
+                                 initiation_age >= 40 & initiation_age < 60 ~ "40-59",
+                                 initiation_age >= 60 & initiation_age < 80 ~ "60-79",
+                                 initiation_age >= 80  ~ ">=80",
+                                 TRUE ~ "<18")) %>%
+  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59", "60-79", ">=80", "<18"))) %>% 
+  mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
+                                 BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
+                                 BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
+                                 BMI_value >= 30  ~ "Obese",
+                                 TRUE ~ "Ms")) %>% 
+  mutate( BMI_group = factor( BMI_group, levels = c( "Underweight", "Normal", "Overweight", "Obese", "Ms"))) %>% 
+  mutate( rural = factor( rural, levels = c( "U", "R", "Ms")))
   
 
-table1(~ initiation_age + 
-         sex + 
-         economic_level + 
-         rural | first_drug, data = table_stage_three_saved_data)
+After_match_cohort <- 
+  Mathced_new_user_cohort_probability %>% 
+  mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
+                                 initiation_age >= 40 & initiation_age < 60 ~ "40-59",
+                                 initiation_age >= 60 & initiation_age < 80 ~ "60-79",
+                                 initiation_age >= 80  ~ ">=80",
+                                 TRUE ~ "<18")) %>%
+  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59", "60-79", ">=80", "<18"))) %>% 
+  mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
+                                 BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
+                                 BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
+                                 BMI_value >= 30  ~ "Obese",
+                                 TRUE ~ "Ms")) %>% 
+  mutate( BMI_group = factor( BMI_group, levels = c( "Underweight", "Normal", "Overweight", "Obese", "Ms"))) %>% 
+  mutate( rural = factor( rural, levels = c( "U", "R", "Ms")))
 
 
 
-labels <- list(
-  variables=list(initiation_age=" Age (years)",
-                 sex= "Sex",
-                 economic_level= "Socioeconomic deprivation",
-                 rural= "Residence area",
-                 BMI_value= "BMI",
-                 Alzheimer_disease = "Alzheimer_disease",
-                 Cancer = "Cancer"),
-  groups=list("", ""))
+## Vector of variables to summarize
+myVars <- c("age_group", "initiation_age", "sex", "economic_level", "rural", 
+            # lifestyle factors
+            "BMI_group", "BMI_value", 
+            # medical conditions
+            "cancer",
+            "peripheral_vascular_disease", "cardiac_insufficiency_heart_failure", "angina", "tia", 
+             "oa", "osteoporosis", "fybromialgia","rheumatoid_arthritis","other_musculskeletal_disorders",
+            "back_pain","neck_pain", 
+            "diabetes","chronic_liver_disease","chronic_kidney_disease", "cough", "dyspnea","pulmonary_oedema","diarrhoea", 
+            "malabsorption_disorder",  "copd", "neurologic_pathologies", "parkinson_disease","alzheimer_disease", "burn_injuries", "surgery", "traffic", 
+            #CCI
+            "windex", 
+            #medications
+            "hypnotics","benzodiazepines", "SSIR",  "anticonvulsant", 
+            "Naproxeno","Diclofenaco","Ibuprofeno", "Celecoxib","NSAID","Paracetamol", "Metamizole", "fentanyl", "morphine",   
+            #health utilisation
+            "GP_visits", "HP_admissions")
+
+## Vector of categorical variables that need transformation
+catVars <- c("alzheimer_disease", 
+             "angina", "back_pain", "burn_injuries", "cancer", "cardiac_insufficiency_heart_failure", 
+             "chronic_kidney_disease", "chronic_liver_disease", "copd", "cough", 
+             "diabetes", "diarrhoea", "dyspnea", "fybromialgia", "malabsorption_disorder", 
+             "neck_pain", "neurologic_pathologies", "oa", "osteoporosis", 
+             "other_musculskeletal_disorders", "parkinson_disease", "peripheral_vascular_disease", 
+             "pulmonary_oedema", "rheumatoid_arthritis", "surgery", "tia", 
+             "traffic", 
+             "anticonvulsant", "benzodiazepines", 
+             "Celecoxib", "Diclofenaco", "fentanyl", "hypnotics", "Ibuprofeno", 
+             "Metamizole", "morphine", "Naproxeno", "NSAID", "Paracetamol", 
+             "SSIR")
 
 
-strata <- c( split(table_stage_three_saved_data, table_stage_three_saved_data$first_drug))
+summary_before <- 
+  CreateTableOne( data = Before_match_cohort, vars = myVars, factorVars = catVars,
+                strata = "first_bill_drug",
+                test = FALSE) %>% 
+  print( smd = TRUE) %>% 
+  tibble::as_tibble(rownames = "var_label") %>% 
+  select( "var_label", "1", "0", "SMD" )
+  
+names(summary_before)
+summary_after <- 
+  CreateTableOne( data = After_match_cohort, vars = myVars, factorVars = catVars,
+                  strata = "first_bill_drug",
+                  test = FALSE) %>% 
+  print( smd = TRUE) %>% 
+  tibble::as_tibble(rownames = "var_label") %>% 
+  select( "var_label", "1", "0", "SMD" )
 
-my.render.cont <- function(x) {
-  with(stats.apply.rounding(stats.default(x), digits=2), c("", "Mean (SD) "= sprintf("%s (&plusmn; %s)", MEAN, SD)))
-}
 
-my.render.cat <- function(x) {
-  c("", sapply(stats.default(x), function(y) with(y, sprintf("%d (%0.0f %%)", FREQ, PCT))))
-}
-
-
-table1(strata, labels, groupspan=c( 1, 1),
-       render.continuous=my.render.cont, render.categorical=my.render.cat)
-
-
-
-
-
+summary_combine <- data.frame( summary_before, summary_after)
 
 
 
