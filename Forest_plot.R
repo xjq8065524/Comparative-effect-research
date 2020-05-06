@@ -1,10 +1,12 @@
 install.packages("forestplot")
 install.packages( "DataCombine")
+install.packages( "meta")
 library(forestplot)
 library(scales)
 library(grid)
 library(gridExtra)
 library( DataCombine)
+library( meta)
 # ATT phrase only ---------------------------------------------------------
 forest <- 
   survial_summary %>% 
@@ -241,13 +243,20 @@ plot_data_preparation <- function( outcome){
       class = "data.frame")
   
   tabletext<-cbind( 
-    c("", "Subgroup", "", interaction_forest$label),
-    c("Tramadol/codeine", "No. at risk", "", paste(interaction_forest$n.y, interaction_forest$n.x, sep = "/")),
-    # c("", "No. of events", "", paste(interaction_forest$events.y, interaction_forest$events.x, sep = "/")),
-    c("", "No. of events", "per 1000 Person-years", paste(interaction_forest$rate.y, interaction_forest$rate.x, sep = "/")),
-    c("Tramadol vs Codeine", "Hazard ratio", "(95% CI)", interaction_forest$CI))
+    c("", "", "Subgroup    ", interaction_forest$label),
+    c("No. of events", "(1000 Person-years)", "Tramadol", paste(interaction_forest$events.y, "(",interaction_forest$rate.y, ")")),
+    c("  ", "", "Codeine", paste(interaction_forest$events.y, "(", interaction_forest$rate.x, ")")),
+    c(rep("  ", nrow(interaction_forest) + 3)))
   
-  tabletext[tabletext == "NA/NA"] <- NA
+  
+  # 
+  # tabletext<-cbind( 
+  #   c("", "Subgroup", "", interaction_forest$label),
+  #   c("Tramadol/codeine", "No. at risk", "", paste(interaction_forest$n.y, interaction_forest$n.x, sep = "/")),
+  #   c("  ", "No. of events", "per 1000 Person-years", paste(interaction_forest$rate.y, interaction_forest$rate.x, sep = "/")))
+  #   # c("Tramadol vs Codeine", "Hazard ratio", "(95% CI)", interaction_forest$CI))
+  
+  tabletext[tabletext == "NA ( NA )"] <- NA
   
   # tabletext<-cbind( 
   #   c("", "Subgroup", "", interaction_forest$label),
@@ -271,25 +280,24 @@ all_cause_mortality <- plot_data_preparation( outcome = "all_cause_mortality")
 plot_func_interaction <- function(input){
   forestplot(input$tabletext, 
              input$graph_data,
+             align = c("l","l","l"),
              new_page = FALSE,
              
-             txt_gp = fpTxtGp( label = gpar( fontfamily = "Candara", cex = 0.45),
-                               ticks = gpar( fontfamily = "Candara", cex = 0.4)),
+             txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", cex = 0.45),
+                               ticks = gpar( fontfamily = "sans", cex = 0.4)),
              is.summary = c(rep(TRUE,3), input$interaction_forest$bold),
              boxsize = 0.3,
              col=fpColors(box=c("royalblue"), line=c("royalblue"), zero = "black", summary = "royalblue"),
              
              colgap = unit(0, "mm"),
              
-             
              graphwidth = unit(30, "mm"),
              lineheight = unit( 3, "mm"),
              
-             
-             graph.pos = 4,
+             graph.pos = 5,
              hrzl_lines = list(
-               "2" = gpar(lty=1, lwd=0.5, columns=c(2:3)),
-               "4" = gpar(lty=1, lwd=0.5, columns=c(1: 5))
+               "3" = gpar(lty=1, lwd=0.5, columns=c(2:3)),
+               "4" = gpar(lty=1, lwd=0.5, columns=c(1: 3))
                # "31" = gpar(lty=1, lwd=0.3, columns=c(4))
                ),
              lwd.xaxis = 0.5,
@@ -310,9 +318,9 @@ plot_func_interaction(input = all_cause_mortality)
 
 
 
-tiff(file = 'Figures/forestplot_test.tiff',
+tiff(file = 'Figures/forestplot_aa.tiff',
      units = "cm",
-     width = 20,
+     width = 16,
      height = 22,
      compression = "lzw",
      res = 500)
@@ -403,3 +411,27 @@ aa(outcomes = "fracturas", breaks = c( 1.5, 2, 2.5, 3, 3.5), lim = c(1.5,3.7))
   
 trans_breaks("log10", function(x) 10 ^ x)(c(1, 1e6))
 trans_breaks("log2", n = 5,function(x) 2^x)(c(1, 4))
+
+
+
+
+# plot use meta package ---------------------------------------------------
+forest(m.hksj.raw)
+
+m.hksj.raw <- metacont(Ne,
+                       Me,
+                       Se,
+                       Nc,
+                       Mc,
+                       Sc,
+                       data = metacont,
+                       studlab = paste(Author),
+                       comb.fixed = FALSE,
+                       comb.random = TRUE,
+                       method.tau = "SJ",
+                       hakn = TRUE,
+                       prediction = TRUE,
+                       sm = "SMD")
+m.hksj.raw
+
+data(metacont)

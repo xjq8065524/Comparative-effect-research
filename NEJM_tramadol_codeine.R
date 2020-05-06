@@ -1,4 +1,6 @@
 #### Set up library ----------------------------------------------------------
+install.packages("fmsb")
+
 
 # memory.limit()
 # memory.limit(62468)
@@ -37,6 +39,7 @@ library(lattice)
 library(cobalt)
 library(survivalAnalysis)
 library( comorbidity)
+library(fmsb)
 # library(fastDummies)
 
 getwd()
@@ -923,15 +926,20 @@ summary_table_func <- function( inputdata){
     summarise(n = n(), 
               # mean_age = mean( initiation_age), 
               events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days))) %>% 
+              mean_follow = as.numeric( mean(follow_up_days)/365), 
+              total_follow = as.numeric( sum(follow_up_days)/365)) %>% 
     group_by(outcome_label, group_label) %>% 
-    mutate( rate = events / (n * mean_follow /365) * 1000 ) %>% 
+    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
     mutate( ratio = rate[2] / rate[1]) %>% 
-    mutate( diff = rate[2] - rate[1]) %>% 
+    mutate( dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$estimate * 1000) %>% 
+    mutate( low_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[1] * 1000) %>% 
+    mutate( high_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[2] * 1000) %>% 
     
     mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
     mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
-            diff = substring(diff, 1,str_locate(as.character(diff), "[.]")[,1] + 2))
+            dif_CI = paste(substring(dif, 1,str_locate(as.character(dif), "[.]")[,1] + 2), " (",
+                           substring(low_dif, 1,str_locate(as.character(low_dif), "[.]")[,1] + 2), "-",
+                           substring(high_dif, 1,str_locate(as.character(high_dif), "[.]")[,1] + 2), ")"))
   
   return(summary_table)
 }
@@ -1036,11 +1044,14 @@ summary_table_func <- function( inputdata){
     summarise(n = n(), 
               mean_age = mean( initiation_age), 
               events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
+              mean_follow = as.numeric( mean(follow_up_days)/365),
+              total_follow = as.numeric( sum(follow_up_days)/365)) %>% 
     group_by(separate_label, outcome_label, group_label) %>% 
     mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
     mutate( ratio = rate[2] / rate[1]) %>% 
-    mutate( dif = rate[2] - rate[1]) %>% 
+    mutate( dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$estimate * 1000) %>% 
+    mutate( low_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[1] * 1000) %>% 
+    mutate( high_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[2] * 1000) %>% 
     mutate( NNH = 1/dif*100) %>% 
     
     mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>%
@@ -1050,8 +1061,6 @@ summary_table_func <- function( inputdata){
   return(summary_table)
 }
 survial_event <- summary_table_func( inputdata = cox_dataset_interaction)
-
-
 
 # #==================================================================#
 # # combine all statistics 
@@ -1128,15 +1137,51 @@ ggplot( data = bb, aes( x = time, y = surv, color = first_bill_drug)) +
 
 
 # Numbers needed to harm --------------------------------------------------
+cox_absolute_risk_ITT <- 
+  Mathced_new_user_cohort %>% 
+  left_join(ITT_outcomes_dataframe, by = "idp") %>% 
+  filter( outcome_label %in% c( "myocardial_infarction", "stroke", "fracturas", "all_cause_mortality"), group_label == "one_year_outcome_dataset") %>% 
+  mutate( age_group = case_when( initiation_age >=18 & initiation_age < 40 ~ "18-39",
+                                 initiation_age >=40 & initiation_age < 60 ~ "40-59",
+                                 initiation_age >=60 & initiation_age < 80 ~ "60-79",
+                                 initiation_age >=80 ~ ">=80")) %>% 
+  mutate( group_label = paste( sex, age_group, sep = "_"))
+
+
+table(cox_interraction_ITT$group_label)
+
+summary_table_func <- function( inputdata){
+  summary_table <- 
+    inputdata %>% 
+    group_by( outcome_label, group_label, first_bill_drug) %>% 
+    summarise(n = n(), 
+              # mean_age = mean( initiation_age), 
+              events = sum( outcome_occur_subject), 
+              mean_follow = as.numeric( mean(follow_up_days))) %>% 
+    group_by(outcome_label, group_label) %>% 
+    mutate( rate = events / (n * mean_follow /365) * 1000 ) %>% 
+    mutate( ratio = rate[2] / rate[1]) %>% 
+    mutate( diff = rate[2] - rate[1]) %>% 
+    
+    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
+    mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
+            diff = substring(diff, 1,str_locate(as.character(diff), "[.]")[,1] + 2))
+  
+  return(summary_table)
+}
+ITT_RD_event <- summary_table_func( inputdata = cox_absolute_risk_ITT)
+
+
+
 aa <- 
-  survial_event %>% 
+  ITT_RD_event %>% 
   ungroup() %>% 
-  filter( separate_label == "fracturas", outcome_label == "initiation_age", first_bill_drug ==0) %>% 
+  filter( outcome_label == "stroke", first_bill_drug ==0) 
   mutate( group_label = factor( group_label, levels = c("18-39", "40-59", "60-79", ">=80")))
 
-ggplot( data = aa, aes( x = group_label, y = NNH))+
+ggplot( data = aa, aes( x = group_label, y = dif))+
   geom_point() +
-  scale_y_sqrt( expand= c(0, 0),breaks = c( 0, 10, 100, 250, 500, 1000, 2000), limits = c(0, 2000)) +
+  # scale_y_sqrt( expand= c(0, 0),breaks = c( 0, 10, 100, 250, 500, 1000, 2000), limits = c(0, 2000)) +
   # scale_y_continuous( )+
   
   theme(
@@ -1165,14 +1210,9 @@ ggplot( data = aa, aes( x = group_label, y = NNH))+
 #==================================================================#
 Table2 <- 
   ITT_survial_summary %>% 
-  select( outcome_label,  events.y, mean_follow.y, rate.y, events.x, mean_follow.x, rate.x, CI, diff.y) %>% 
-  mutate( outcome_label = factor( outcome_label, levels = c("opioid_abuse","stroke",  "fracturas",  "all_cause_mortality",
-                                                             "cardiac_arrhythmia", "myocardial_infarction","constipation",  "delirium", "sleep_disorders", "falls")))
-
-
-
-
-
+  select( outcome_label,  events.y,  rate.y, events.x,  rate.x, CI, dif_CI.y) %>% 
+  mutate( outcome_label = factor( outcome_label, levels = c("myocardial_infarction","stroke",  "fracturas",  "all_cause_mortality",
+                                                             "cardiac_arrhythmia", "constipation",  "delirium", "sleep_disorders", "falls", "opioid_abuse")))
 
 # Propensity score matching -----------------------------------------------
 
