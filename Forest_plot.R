@@ -200,6 +200,157 @@ dev.off()
 
 
 
+
+# ITT only -----------------------------------------------------
+ITT_forest <- 
+  ITT_survial_summary %>% 
+  ungroup() %>% 
+  add_row( outcome_label = c("Primary outcomes", "Secondary outcomes")) %>% 
+  mutate( outcome_label = factor( outcome_label, 
+                                  levels = c("Primary outcomes", "myocardial_infarction","stroke",  "fracturas",  "all_cause_mortality",
+                                             "Secondary outcomes", "cardiac_arrhythmia", "constipation",  "delirium", "sleep_disorders", "falls", "opioid_abuse"),
+                                  labels = c("Primary outcomes", "Myocardial infarction","Stroke",  "Fracture",  "All-cause mortality",
+                                             "Secondary outcomes  ","Cardiac arrhythmia", "Constipation",  "Delirium", "Sleep disorders", "Fall", "Opioid abuse"))) %>% 
+  # 
+  # mutate(stage = factor( stage, levels = c( "space","On-treatment","Intention-to-treatment"))) %>% 
+  mutate(bold = case_when( is.na(group_label) ~ TRUE,
+                           TRUE ~ FALSE)) %>% 
+  arrange( outcome_label)
+# Cochrane data from the 'rmeta'-package
+graph_data <- 
+  structure(list(
+    mean  = c(NA, NA, NA, as.numeric(ITT_forest$estimate)), 
+    lower = c(NA, NA, NA, as.numeric(ITT_forest$lower)),
+    upper = c(NA, NA, NA, as.numeric(ITT_forest$upper))),
+    .Names = c("mean", "lower", "upper"), 
+    row.names = c(NA, -(nrow(ITT_forest) + 3)), 
+    class = "data.frame")
+
+tabletext<-cbind( 
+  c("", "", "Outcomes", as.character(ITT_forest$outcome_label)),
+  c("", "No. at", "Risk", ITT_forest$n.x),
+  c(rep("  ", nrow(ITT_forest) + 3)),
+  c("Tramadol", "No. of", "Events", ITT_forest$events.y),
+  c("", "Incidence", "Rate", ITT_forest$rate.y),
+  c(rep("  ", nrow(ITT_forest) + 3)),
+  c("Codeine", "No. of", "Events", ITT_forest$events.x),
+  c("", "Incidence", "Rate", ITT_forest$rate.x),
+  c(rep("  ", nrow(ITT_forest) + 3)),
+  c("Absolute Risk", "Increase, ‰", "(95% CI)", ITT_forest$dif_CI.x),
+  c(rep("  ", nrow(ITT_forest) + 3)),
+  c("", "Hazard ratio", "(95% CI)", ITT_forest$CI)
+  )
+  
+
+
+
+
+tiff(file = 'Figures/forestplot_main_results.tiff',
+     units = "cm",
+     width = 16,
+     height = 6.5,
+     compression = "lzw",
+res = 800)
+test <- function(){
+  forestplot(
+    labeltext=tabletext,
+    graph_data,
+    new_page = TRUE,
+    align = c(rep("l",8)),
+    
+    txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 8, cex = 0.68),
+                      ticks = gpar( fontfamily = "sans", fontsize = 8, cex = 0.68),
+                      xlab = gpar( fontfamily = "sans", fontsize = 8, cex = 0.68)),
+    
+    is.summary = c(rep(TRUE,3), ITT_forest$bold),
+    boxsize = 0.25,
+    col=fpColors(box=c("royalblue"), line=c("royalblue"), zero = "black"),
+    
+    colgap = unit(1.5, "mm"),
+    
+    
+    graphwidth = unit(38, "mm"),
+    lineheight = unit(4.2, "mm"),
+    
+    
+    # graph.pos = 9,
+    hrzl_lines = list("1" = gpar(lty=1, lwd=0.5, columns=c(1:13)),
+                      "2" = gpar(lty=1, lwd=0.5, columns=c(4:5, 7:8)),
+                      "4" = gpar(lty=1, lwd=0.5, columns=c(1:13)),
+                      "6" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "7" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "8" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "9" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "11" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "12" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "13" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "14" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "15" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+                      "16" = gpar(lty=1, lwd=0.5, columns=c(1:12))
+    ),
+    
+    lwd.xaxis = 0.5,
+    lwd.zero = gpar(lwd=0.5),
+    clip=c(0.5,3.5), 
+    xticks = c( 0.5, 1, 1.5, 2, 3, 4),
+    xticks.digits = 1,
+    
+    xlab = "Hazard Ratio (95% CI)",
+    
+    xlog=TRUE)
+  
+}
+test()
+# upViewport()
+downViewport( "Line_2_25")
+grid.text("Favors",
+          x=unit(0.05, "npc"), 
+          y=unit(0.2, "npc"),
+          just=c("left", "bottom"),
+          gp = gpar(col="black", 
+                    fontsize = 8, 
+                    fontface = "bold",
+                    cex = 0.75))
+upViewport()
+downViewport( "Line_3_25")
+grid.text("Tramadol",
+          x=unit(0.05, "npc"), 
+          y=unit(0.2, "npc"),
+          just=c("left", "bottom"),
+          gp = gpar(col="black", 
+                    fontsize = 8, 
+                    fontface = "bold",
+                    cex = 0.75))
+
+upViewport()
+downViewport( "Line_2_25")
+grid.text("Favors",
+          x=unit(0.5, "npc"), 
+          y=unit(0.2, "npc"),
+          just=c("left", "bottom"),
+          gp = gpar(col="black", 
+                    fontsize = 8, 
+                    fontface = "bold",
+                    cex = 0.75))
+
+upViewport()
+downViewport( "Line_3_25")
+grid.text("Codeine",
+          x=unit(0.5, "npc"), 
+          y=unit(0.2, "npc"),
+          just=c("left", "bottom"),
+          gp = gpar(col="black", 
+                    fontsize = 8, 
+                    fontface = "bold",
+                    cex = 0.75))
+
+dev.off()
+
+
+
+
+
+
 # Interaction in ITT ------------------------------------------------------
 c( "myocardial_infarction", "stroke", "fracturas", "all_cause_mortality")
 
@@ -229,7 +380,9 @@ plot_data_preparation <- function( outcome){
                                TRUE ~ label)) %>% 
     mutate( bold = case_when( label == "Overall" & bold == FALSE ~ TRUE,
                               TRUE ~ bold)) %>% 
-    arrange( outcome_label, group_label)
+    arrange( outcome_label, group_label) %>% 
+    mutate( box = case_when( row_number() == n() ~ 0.8,
+                             TRUE ~ 0.25)) 
   
   
   # Cochrane data from the 'rmeta'-package
@@ -244,8 +397,8 @@ plot_data_preparation <- function( outcome){
   
   tabletext<-cbind( 
     c("", "", "Subgroup    ", interaction_forest$label),
-    c("No. of events", "(1000 Person-years)", "Tramadol", paste(interaction_forest$events.y, "(",interaction_forest$rate.y, ")")),
-    c("  ", "", "Codeine", paste(interaction_forest$events.y, "(", interaction_forest$rate.x, ")")),
+    c("No. of events", "(1000 Person-years)", "Tramadol", paste(interaction_forest$events.y, " (",interaction_forest$rate.y, ")", sep = "")),
+    c("  ", "", "Codeine", paste(interaction_forest$events.x, " (", interaction_forest$rate.x, ")", sep = "")),
     c(rep("  ", nrow(interaction_forest) + 3)))
   
   
@@ -256,7 +409,7 @@ plot_data_preparation <- function( outcome){
   #   c("  ", "No. of events", "per 1000 Person-years", paste(interaction_forest$rate.y, interaction_forest$rate.x, sep = "/")))
   #   # c("Tramadol vs Codeine", "Hazard ratio", "(95% CI)", interaction_forest$CI))
   
-  tabletext[tabletext == "NA ( NA )"] <- NA
+  tabletext[tabletext == "NA (NA)"] <- NA
   
   # tabletext<-cbind( 
   #   c("", "Subgroup", "", interaction_forest$label),
@@ -284,15 +437,19 @@ plot_func_interaction <- function(input){
              new_page = FALSE,
              
              txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", cex = 0.45),
-                               ticks = gpar( fontfamily = "sans", cex = 0.4)),
+                               ticks = gpar( fontfamily = "sans", cex = 0.45),
+                               xlab = gpar( fontfamily = "sans", cex = 0.45)),
              is.summary = c(rep(TRUE,3), input$interaction_forest$bold),
-             boxsize = 0.3,
-             col=fpColors(box=c("royalblue"), line=c("royalblue"), zero = "black", summary = "royalblue"),
+             boxsize = c(rep(TRUE,3), input$interaction_forest$box),
+             col=fpColors( box=c("royalblue"), 
+                           line=c("royalblue"), 
+                           zero = "black", 
+                           summary = "royalblue"),
              
              colgap = unit(0, "mm"),
              
              graphwidth = unit(30, "mm"),
-             lineheight = unit( 3, "mm"),
+             lineheight = unit( 3.2, "mm"),
              
              graph.pos = 5,
              hrzl_lines = list(
@@ -301,12 +458,12 @@ plot_func_interaction <- function(input){
                # "31" = gpar(lty=1, lwd=0.3, columns=c(4))
                ),
              lwd.xaxis = 0.5,
-             
              lwd.zero = gpar(lwd=0.5),
              clip=c(0.5,3.5), 
-             xticks = c( 0.5, 1, 1.5, 3, 5),
+             xticks = c( 0.5, 1, 1.5, 2, 4),
              grid = structure( input$graph_data$mean[nrow(input$graph_data)], gp = gpar(lty =2, lwd=0.5, col = "grey")),
              
+             xlab = "Hazard Ratio (95% CI)",
              xlog=TRUE)
 }
 
@@ -323,7 +480,7 @@ tiff(file = 'Figures/forestplot_aa.tiff',
      width = 16,
      height = 22,
      compression = "lzw",
-     res = 500)
+     res = 800)
 
 
 
@@ -333,23 +490,23 @@ tiff(file = 'Figures/forestplot_aa.tiff',
  vp3 <- viewport(x = 0, y = 0, w = 0.5, h = 0.5, just = c("left", "bottom"))
  vp4 <- viewport(x = 0.5, y = 0, w = 0.5, h = 0.5, just = c("left", "bottom"))
  pushViewport(vp1)
- grid.rect(gp = gpar(col = "grey"))
+ grid.rect(gp = gpar(col = "grey", lwd=0.5))
  # grid.text("Some drawing in graphics region 1", y = 0.8)
  plot_func_interaction(input = myocardial_infarction)
  upViewport()
  
  pushViewport(vp2)
- grid.rect(gp = gpar(col = "grey"))
+ grid.rect(gp = gpar(col = "grey", lwd=0.5))
  plot_func_interaction(input = stroke)
  upViewport()
  
  pushViewport(vp3)
- grid.rect(gp = gpar(col = "grey"))
+ grid.rect(gp = gpar(col = "grey", lwd=0.5))
  plot_func_interaction(input = fracturas)
  upViewport()
  
  pushViewport(vp4)
- grid.rect(gp = gpar(col = "grey"))
+ grid.rect(gp = gpar(col = "grey", lwd=0.5))
  plot_func_interaction(input = all_cause_mortality)
  upViewport()
  
@@ -415,23 +572,3 @@ trans_breaks("log2", n = 5,function(x) 2^x)(c(1, 4))
 
 
 
-# plot use meta package ---------------------------------------------------
-forest(m.hksj.raw)
-
-m.hksj.raw <- metacont(Ne,
-                       Me,
-                       Se,
-                       Nc,
-                       Mc,
-                       Sc,
-                       data = metacont,
-                       studlab = paste(Author),
-                       comb.fixed = FALSE,
-                       comb.random = TRUE,
-                       method.tau = "SJ",
-                       hakn = TRUE,
-                       prediction = TRUE,
-                       sm = "SMD")
-m.hksj.raw
-
-data(metacont)

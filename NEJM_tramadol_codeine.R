@@ -912,7 +912,7 @@ survial_hazard_func <- function(input){
     rename( variable = rowname) %>% 
     mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
                        substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))}
+                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")", sep = ""))}
 
 ITT_survial_hazard <- survial_hazard_func(input = res.separate)
 
@@ -939,7 +939,7 @@ summary_table_func <- function( inputdata){
     mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
             dif_CI = paste(substring(dif, 1,str_locate(as.character(dif), "[.]")[,1] + 2), " (",
                            substring(low_dif, 1,str_locate(as.character(low_dif), "[.]")[,1] + 2), "-",
-                           substring(high_dif, 1,str_locate(as.character(high_dif), "[.]")[,1] + 2), ")"))
+                           substring(high_dif, 1,str_locate(as.character(high_dif), "[.]")[,1] + 2), ")", sep = ""))
   
   return(summary_table)
 }
