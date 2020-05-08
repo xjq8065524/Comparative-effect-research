@@ -1075,64 +1075,587 @@ survial_summary <-
 
 
 # Kaplan-Meier survival estimate ------------------------------------------
+
+
 cox_dataset_ITT <- 
   Mathced_new_user_cohort %>% 
-  select( idp) %>% 
-  left_join( First_billing_dataset, by = "idp") %>% 
+  select( idp, first_bill_drug) %>% 
   left_join(ITT_outcomes_dataframe, by = "idp") %>% 
-  filter( outcome_label == "stroke" )
+  filter( outcome_label %in% c("myocardial_infarction","stroke",  "fracturas",  "all_cause_mortality"))
 
-# 
+
 # res.cox <- coxph(Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug, data =  cox_dataset_ITT)
-# res.cox
 # test.ph <- cox.zph(res.cox)
 # test.ph
 # 
 # ggcoxzph(test.ph)
 
 
-
-fit <- npsurv(Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug, data = cox_dataset_ITT)
-
-
-aa <- ggsurvplot(fit,
-           fun = function(x) {-log(x)},
-           )
-
-bb <- aa$plot$data
+main_table_func<- function( target){
+  cox_dataset_ITT <- 
+    Mathced_new_user_cohort %>% 
+    select( idp, first_bill_drug) %>% 
+    left_join(ITT_outcomes_dataframe, by = "idp") %>% 
+    filter( outcome_label == target)
   
-ggplot( data = bb, aes( x = time, y = surv, color = first_bill_drug)) +
-  geom_point( size = 0.1) +
-  geom_line() +
-  scale_x_continuous( expand = c(0,0),limits = c( 0, 380), breaks = seq( 0, 360, 30), labels = seq( 0, 12, 1))+
-  scale_y_continuous( expand = c(0,0), limits = c( 0, 0.05))+
-  labs(x = "Months of follow-up",
-       y = "Cumulative Events")+
-
   
-  theme(
-    text = element_text(family = "Candara", colour = "black"),
-    # panel.border = element_rect(fill=NA),
-    panel.background = element_blank(),
-    panel.grid.major.x = element_blank(),
-    # panel.grid.minor.x = element_blank(),
-    # panel.grid.minor.y = element_line(color = "grey"),
-    # panel.spacing = unit(0.5, "lines"),
-    # plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
-    strip.background = element_blank(),
-    # strip.text = element_blank(),
+  Fit_data <- npsurv(Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug, 
+                     data = cox_dataset_ITT) %>% 
+    ggsurvplot(fun = function(x) {-log(x)}, risk.table = TRUE, break.time.by = 90)
+  
+  table_data <- Fit_data$table$data
+  return(table_data)
+  
+}
+main_table_MI <- main_table_func( target = "myocardial_infarction") 
+main_table_stroke <- main_table_func( target = "stroke") 
+main_table_Fracture <- main_table_func( target = "fracturas") 
+main_table_mortality <- main_table_func( target = "all_cause_mortality") 
+
+
+
+main_plot_func_10<- function( target){
+  cox_dataset_ITT <- 
+    Mathced_new_user_cohort %>% 
+    select( idp, first_bill_drug) %>% 
+    left_join(ITT_outcomes_dataframe, by = "idp") %>% 
+    filter( outcome_label == target)
+  
+  
+  Fit_data <- npsurv(Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug, 
+                     data = cox_dataset_ITT) %>% 
+    ggsurvplot(fun = function(x) {-log(x)}, risk.table = TRUE, break.time.by = 90)
+  
+  plot_data <- Fit_data$plot$data
+  table_data <- Fit_data$table$data
+  
+  ggplot( data = plot_data, aes( x = time, y = surv * 1000, color = first_bill_drug)) +
+    geom_point( size = 0.001) +
+    geom_line( ) +
+    scale_x_continuous( expand = c(0, 0),limits = c( 0, 370), breaks = seq( 0, 360, 90), labels = seq( 0, 12, 3))+
+    scale_y_continuous( expand = c(0, 0), limits = c( 0, 10))+
+    labs(x = "Months of Follow-up ",
+         y = "Cumulative \nIncidence Rate, ‰")+
+    scale_color_jama() +
     
-    axis.line = element_line(),
-    # axis.text.x  = element_text( angle = 45, vjust = 0.5),
-    axis.title.y  = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
-    legend.position = "none",
-    aspect.ratio = 0.8) 
+    theme(
+      text = element_text(family = "sans", colour = "black", size  = 6),
+      axis.text = element_text(colour = "black", size  = 6),
+      line = element_line( size = 0.25),
+      # panel.border = element_rect(fill=NA),
+      panel.background = element_blank(),
+      panel.grid.major.x = element_blank(),
+      # panel.grid.minor.x = element_blank(),
+      panel.grid.major.y = element_line(color = "grey"),
+      # panel.spacing = unit(0.5, "lines"),
+      # plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+      strip.background = element_blank(),
+      # strip.text = element_blank(),
+      axis.line = element_line(),
+      # axis.text.x  = element_text( angle = 45, vjust = 0.5),
+      # axis.title.y  = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
+      legend.position = "none",
+      aspect.ratio = 0.55) 
+}
+main_plot_MI <- main_plot_func_10( target = "myocardial_infarction") %>% ggplotGrob()
+main_plot_stroke <- main_plot_func_10( target = "stroke") %>% ggplotGrob()
+
+
+main_plot_func_50 <- function( target){
+  cox_dataset_ITT <- 
+    Mathced_new_user_cohort %>% 
+    select( idp, first_bill_drug) %>% 
+    left_join(ITT_outcomes_dataframe, by = "idp") %>% 
+    filter( outcome_label == target)
+  
+  
+  Fit_data <- npsurv(Surv(follow_up_days, outcome_occur_subject) ~ first_bill_drug, 
+                     data = cox_dataset_ITT) %>% 
+    ggsurvplot(fun = function(x) {-log(x)}, risk.table = TRUE, break.time.by = 90)
+  
+  plot_data <- Fit_data$plot$data
+  table_data <- Fit_data$table$data
+  
+  ggplot( data = plot_data, aes( x = time, y = surv * 1000, color = first_bill_drug)) +
+    geom_point( size = 0.001) +
+    geom_line( ) +
+    scale_x_continuous( expand = c(0, 0),limits = c( 0, 370), breaks = seq( 0, 360, 90), labels = seq( 0, 12, 3))+
+    scale_y_continuous( expand = c(0, 0), limits = c( 0, 50))+
+    labs(x = "Months of Follow-up ",
+         y = "Cumulative \nIncidence Rate, ‰")+
+    scale_color_jama() +
+    
+    theme(
+      text = element_text(family = "sans", colour = "black", size  = 6),
+      axis.text = element_text(colour = "black", size  = 6),
+      line = element_line( size = 0.25),
+      # panel.border = element_rect(fill=NA),
+      panel.background = element_blank(),
+      panel.grid.major.x = element_blank(),
+      # panel.grid.minor.x = element_blank(),
+      panel.grid.major.y = element_line(color = "grey"),
+      # panel.spacing = unit(0.5, "lines"),
+      # plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+      strip.background = element_blank(),
+      # strip.text = element_blank(),
+      axis.line = element_line(),
+      # axis.text.x  = element_text( angle = 45, vjust = 0.5),
+      # axis.title.y  = element_text(margin = margin(t = 0, r = 5, b = 0, l = 0)),
+      legend.position = "none",
+      aspect.ratio = 0.55) 
+}
+main_plot_Fracture <- main_plot_func_50( target = "fracturas") %>% ggplotGrob()
+main_plot_mortality <- main_plot_func_50( target = "all_cause_mortality") %>% ggplotGrob()
+
+plot_func <- function(){
+
+  # g <- ggplotGrob(main_plot)
+  
+  grid.newpage()
+  
+  widths <- unit(c(7.5, 1, 7.5), c("cm", "cm", "cm"))
+  heights <- unit(c(1, 4.5, 0.8, 1.5, 4.5, 0.8), c("cm", "cm", "cm", "cm", "cm", "cm"))
+  lay <- grid.layout(nrow = 6, 
+                     ncol = 3, 
+                     widths=widths,
+                     heights = heights)
+  
+  vp <- viewport( width = unit(16, units = "cm"),
+                  height = unit( 18, units = "cm"),
+                  layout = lay)
+  pushViewport(vp)
+  # grid.rect(gp=gpar(col=NA, fill="grey80"))
+  
+  MI_part <- function(){
+    pushViewport(viewport(layout.pos.row=1,
+                          layout.pos.col=1))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,1,0,.5)))
+    grid.rect(x=unit(0, "cm"), y=unit(0.35, "cm"),
+              width=unit(0.25, "cm"), height=unit(0.25, "cm"),
+              just=c("left", "bottom"),
+              gp=gpar(col= "black"))
+    
+    grid.text(" A   Myocardial Infarction",
+              x=unit(0, "cm"), y=unit(0.4, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+    
+    pushViewport(viewport(layout.pos.row=3,
+                          layout.pos.col=2))
+    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    
+    upViewport()
+    pushViewport(viewport(layout.pos.row=2,
+                          layout.pos.col=1))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    grid.draw(main_plot_MI)
+    upViewport()
+    pushViewport(viewport(layout.pos.row=3,
+                          layout.pos.col=1))
+    
+    grid.text("No. at risk",
+              x=unit(0, "cm"), y=unit(0.6, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Tramadol",
+              x=unit(0, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Codeine",
+              x=unit(0, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #codeine 
+    grid.text(table_data$n.risk[1],
+              x=unit(1, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[2],
+              x=unit(2.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[3],
+              x=unit(3.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[4],
+              x=unit(5.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[5],
+              x=unit(6.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #tramadol 
+    grid.text(table_data$n.risk[6],
+              x=unit(1, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[7],
+              x=unit(2.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[8],
+              x=unit(3.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[9],
+              x=unit(5.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[10],
+              x=unit(6.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+  }
+  MI_part()
+  
+  Stroke_part <- function(){
+    pushViewport(viewport(layout.pos.row=1,
+                          layout.pos.col=3))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,1,0,.5)))
+    grid.rect(x=unit(0, "cm"), y=unit(0.35, "cm"),
+              width=unit(0.25, "cm"), height=unit(0.25, "cm"),
+              just=c("left", "bottom"),
+              gp=gpar(col= "black"))
+    
+    grid.text(" B   Stroke",
+              x=unit(0, "cm"), y=unit(0.4, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+    
+    pushViewport(viewport(layout.pos.row=3,
+                          layout.pos.col=2))
+    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    
+    upViewport()
+    pushViewport(viewport(layout.pos.row=2,
+                          layout.pos.col=3))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    grid.draw(main_plot_stroke)
+    upViewport()
+    pushViewport(viewport(layout.pos.row=3,
+                          layout.pos.col=3))
+    
+    grid.text("No. at risk",
+              x=unit(0, "cm"), y=unit(0.6, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Tramadol",
+              x=unit(0, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Codeine",
+              x=unit(0, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #codeine 
+    grid.text(table_data$n.risk[1],
+              x=unit(1, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[2],
+              x=unit(2.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[3],
+              x=unit(3.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[4],
+              x=unit(5.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[5],
+              x=unit(6.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #tramadol 
+    grid.text(table_data$n.risk[6],
+              x=unit(1, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[7],
+              x=unit(2.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[8],
+              x=unit(3.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[9],
+              x=unit(5.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[10],
+              x=unit(6.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+  }
+  Stroke_part()
+  
+  fracture_part <- function(){
+    pushViewport(viewport(layout.pos.row=4,
+                          layout.pos.col=1))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,1,0,.5)))
+    grid.rect(x=unit(0, "cm"), y=unit(0.35, "cm"),
+              width=unit(0.25, "cm"), height=unit(0.25, "cm"),
+              just=c("left", "bottom"),
+              gp=gpar(col= "black"))
+    
+    grid.text(" C   Fracture",
+              x=unit(0, "cm"), y=unit(0.4, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+    
+    pushViewport(viewport(layout.pos.row=6,
+                          layout.pos.col=2))
+    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    
+    upViewport()
+    pushViewport(viewport(layout.pos.row=5,
+                          layout.pos.col=1))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    grid.draw(main_plot_Fracture)
+    upViewport()
+    pushViewport(viewport(layout.pos.row=6,
+                          layout.pos.col=1))
+    
+    grid.text("No. at risk",
+              x=unit(0, "cm"), y=unit(0.6, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Tramadol",
+              x=unit(0, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Codeine",
+              x=unit(0, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #codeine 
+    grid.text(table_data$n.risk[1],
+              x=unit(1, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[2],
+              x=unit(2.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[3],
+              x=unit(3.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[4],
+              x=unit(5.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[5],
+              x=unit(6.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #tramadol 
+    grid.text(table_data$n.risk[6],
+              x=unit(1, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[7],
+              x=unit(2.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[8],
+              x=unit(3.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[9],
+              x=unit(5.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[10],
+              x=unit(6.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+  }
+  fracture_part()
+  
+  mortality <- function(){
+    pushViewport(viewport(layout.pos.row=4,
+                          layout.pos.col=3))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,1,0,.5)))
+    grid.rect(x=unit(0, "cm"), y=unit(0.35, "cm"),
+              width=unit(0.25, "cm"), height=unit(0.25, "cm"),
+              just=c("left", "bottom"),
+              gp=gpar(col= "black"))
+    
+    grid.text(" D   All-cause Mortality",
+              x=unit(0, "cm"), y=unit(0.4, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+    
+    pushViewport(viewport(layout.pos.row=6,
+                          layout.pos.col=2))
+    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    
+    upViewport()
+    pushViewport(viewport(layout.pos.row=5,
+                          layout.pos.col=3))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    grid.draw(main_plot_mortality)
+    upViewport()
+    pushViewport(viewport(layout.pos.row=6,
+                          layout.pos.col=3))
+    
+    grid.text("No. at risk",
+              x=unit(0, "cm"), y=unit(0.6, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Tramadol",
+              x=unit(0, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    grid.text("Codeine",
+              x=unit(0, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #codeine 
+    grid.text(table_data$n.risk[1],
+              x=unit(1, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[2],
+              x=unit(2.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[3],
+              x=unit(3.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[4],
+              x=unit(5.3, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[5],
+              x=unit(6.8, "cm"), y=unit(0, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    #tramadol 
+    grid.text(table_data$n.risk[6],
+              x=unit(1, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[7],
+              x=unit(2.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[8],
+              x=unit(3.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[9],
+              x=unit(5.3, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    
+    grid.text(table_data$n.risk[10],
+              x=unit(6.8, "cm"), y=unit(0.3, "cm"),
+              just=c("left", "bottom"),
+              gp = gpar( fontsize = 6))
+    upViewport()
+  }
+  mortality()
+  
+  
+  
+  
+  
+}
+
+# tiff(file = 'Figures/survival_curve.tiff',
+#      units = "cm",
+#      width = 16,
+#      height = 16,
+#      compression = "lzw",
+#      res = 800)
+
+plot_func()
+
+# dev.off()
 
 
 
-?scale_x_continuous
 
 
+
+
+
+# table_plot <- 
+#   ggplot( data = table_data, aes( x= time, y= first_bill_drug, label = n.risk))+
+#   geom_text( size  = 8*5/15, hjust = 0) +
+#   scale_x_continuous(expand = c(0,0),limits = c( 0, 395))+
+#   scale_y_discrete(expand = c(0,0.1), labels = c( "Codeine", "Tramadol"))+
+# 
+#   theme(text = element_text(family = "sans", colour = "black", size  = 8),
+#         axis.text = element_text(colour = "black", size  = 8),
+#         axis.ticks = element_blank())
+
+
+  
+
+#   g2 <- ggplotGrob(main_plot)
+#   g3 <- ggplotGrob(table_plot)
+#   g <- rbind(g2, g3, size = "first")
+#   g$widths <- unit.pmax(g2$widths, g3$widths)
+#   grid.newpage()
+#   grid.draw(g)
+#   
+  
+  
 
 
 
