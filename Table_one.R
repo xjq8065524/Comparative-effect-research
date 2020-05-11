@@ -84,10 +84,9 @@ Before_match_cohort <-
   Base_new_user_cohort_probability %>% 
   mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                  initiation_age >= 40 & initiation_age < 60 ~ "40-59",
-                                 initiation_age >= 60 & initiation_age < 80 ~ "60-79",
-                                 initiation_age >= 80  ~ ">=80",
+                                 initiation_age >= 60  ~ ">=60",
                                  TRUE ~ "<18")) %>%
-  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59", "60-79", ">=80", "<18"))) %>% 
+  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59",  ">=60", "<18"))) %>% 
   mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
                                  BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
                                  BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
@@ -98,13 +97,12 @@ Before_match_cohort <-
   
 
 After_match_cohort <- 
-  Mathced_new_user_cohort_probability %>% 
+  Mathced_new_user_cohort %>% 
   mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                  initiation_age >= 40 & initiation_age < 60 ~ "40-59",
-                                 initiation_age >= 60 & initiation_age < 80 ~ "60-79",
-                                 initiation_age >= 80  ~ ">=80",
+                                 initiation_age >= 60  ~ ">=60",
                                  TRUE ~ "<18")) %>%
-  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59", "60-79", ">=80", "<18"))) %>% 
+  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59",  ">=60", "<18"))) %>% 
   mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
                                  BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
                                  BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
@@ -121,7 +119,7 @@ myVars <- c("age_group", "initiation_age", "sex", "economic_level", "rural",
             "BMI_group", "BMI_value", 
             # medical conditions
             "cancer",
-            "peripheral_vascular_disease", "cardiac_insufficiency_heart_failure", "angina", "tia", 
+            "peripheral_vascular_disease", "cardiac_arrhythmia",  "angina", "tia", 
              "oa", "osteoporosis", "fybromialgia","rheumatoid_arthritis","other_musculskeletal_disorders",
             "back_pain","neck_pain", 
             "diabetes","chronic_liver_disease","chronic_kidney_disease", "cough", "dyspnea","pulmonary_oedema","diarrhoea", 
@@ -135,39 +133,45 @@ myVars <- c("age_group", "initiation_age", "sex", "economic_level", "rural",
             "GP_visits", "HP_admissions")
 
 ## Vector of categorical variables that need transformation
-catVars <- c("alzheimer_disease", 
-             "angina", "back_pain", "burn_injuries", "cancer", "cardiac_insufficiency_heart_failure", 
-             "chronic_kidney_disease", "chronic_liver_disease", "copd", "cough", 
-             "diabetes", "diarrhoea", "dyspnea", "fybromialgia", "malabsorption_disorder", 
-             "neck_pain", "neurologic_pathologies", "oa", "osteoporosis", 
-             "other_musculskeletal_disorders", "parkinson_disease", "peripheral_vascular_disease", 
-             "pulmonary_oedema", "rheumatoid_arthritis", "surgery", "tia", 
-             "traffic", 
-             "anticonvulsant", "benzodiazepines", 
-             "Celecoxib", "Diclofenaco", "fentanyl", "hypnotics", "Ibuprofeno", 
-             "Metamizole", "morphine", "Naproxeno", "NSAID", "Paracetamol", 
-             "SSIR")
+# catVars <- c("alzheimer_disease", 
+#              "angina", "back_pain", "burn_injuries", "cancer", "cardiac_insufficiency_heart_failure", 
+#              "chronic_kidney_disease", "chronic_liver_disease", "copd", "cough", 
+#              "diabetes", "diarrhoea", "dyspnea", "fybromialgia", "malabsorption_disorder", 
+#              "neck_pain", "neurologic_pathologies", "oa", "osteoporosis", 
+#              "other_musculskeletal_disorders", "parkinson_disease", "peripheral_vascular_disease", 
+#              "pulmonary_oedema", "rheumatoid_arthritis", "surgery", "tia", 
+#              "traffic", 
+#              "anticonvulsant", "benzodiazepines", 
+#              "Celecoxib", "Diclofenaco", "fentanyl", "hypnotics", "Ibuprofeno", 
+#              "Metamizole", "morphine", "Naproxeno", "NSAID", "Paracetamol", 
+#              "SSIR")
 
 
 summary_before <- 
-  CreateTableOne( data = Before_match_cohort, vars = myVars, factorVars = catVars,
+  CreateTableOne( data = Before_match_cohort, vars = myVars, 
                 strata = "first_bill_drug",
                 test = FALSE) %>% 
   print( smd = TRUE) %>% 
   tibble::as_tibble(rownames = "var_label") %>% 
-  select( "var_label", "1", "0", "SMD" )
+  rename( "before_tramadol" = "1", "before_codeine" = "0", "before_smd" = "SMD" ) %>% 
+  mutate( before_tramadol = sub("\\( ", "\\(", before_tramadol),
+          before_codeine = sub("\\( ", "\\(", before_codeine)) %>% 
+  select( var_label, before_tramadol, before_codeine, before_smd)
+  
   
 names(summary_before)
 summary_after <- 
-  CreateTableOne( data = After_match_cohort, vars = myVars, factorVars = catVars,
+  CreateTableOne( data = After_match_cohort, vars = myVars, 
                   strata = "first_bill_drug",
                   test = FALSE) %>% 
   print( smd = TRUE) %>% 
   tibble::as_tibble(rownames = "var_label") %>% 
-  select( "var_label", "1", "0", "SMD" )
+  rename( "after_tramadol" = "1", "after_codeine" = "0", "after_smd" = "SMD" ) %>% 
+  mutate( after_tramadol = sub("\\( ", "\\(", after_tramadol),
+          after_codeine = sub("\\( ", "\\(", after_codeine))%>% 
+  select( var_label, after_tramadol, after_codeine, after_smd)
 
 
-summary_combine <- data.frame( summary_before, summary_after)
-
-
+summary_combine <- 
+  data.frame( summary_before, summary_after) 
 
