@@ -40,6 +40,8 @@ library(cobalt)
 library(survivalAnalysis)
 library( comorbidity)
 library(fmsb)
+library( grid)
+library( devEMF)
 # library(fastDummies)
 
 getwd()
@@ -1130,8 +1132,9 @@ main_plot_func_10<- function( target){
   table_data <- Fit_data$table$data
   
   ggplot( data = plot_data, aes( x = time, y = surv * 1000, color = first_bill_drug)) +
-    geom_point( size = 0.001) +
-    geom_line( ) +
+    # geom_point( size = 0.001) +
+    # geom_line( ) +
+    geom_step( size = 0.25) +
     scale_x_continuous( expand = c(0, 0),limits = c( 0, 370), breaks = seq( 0, 360, 90), labels = seq( 0, 12, 3))+
     scale_y_continuous( expand = c(0, 0), limits = c( 0, 10))+
     labs(x = "Months of Follow-up ",
@@ -1157,8 +1160,9 @@ main_plot_func_10<- function( target){
       legend.position = "none",
       aspect.ratio = 0.55) 
 }
+
 main_plot_MI <- main_plot_func_10( target = "myocardial_infarction") %>% ggplotGrob()
-main_plot_stroke <- main_plot_func_10( target = "stroke") %>% ggplotGrob()
+main_plot_stroke <- main_plot_func_10( target = "stroke")  %>% ggplotGrob()
 
 
 main_plot_func_50 <- function( target){
@@ -1177,8 +1181,9 @@ main_plot_func_50 <- function( target){
   table_data <- Fit_data$table$data
   
   ggplot( data = plot_data, aes( x = time, y = surv * 1000, color = first_bill_drug)) +
-    geom_point( size = 0.001) +
-    geom_line( ) +
+    # geom_point( size = 0.001) +
+    # geom_line( ) +
+    geom_step( size = 0.25) +
     scale_x_continuous( expand = c(0, 0),limits = c( 0, 370), breaks = seq( 0, 360, 90), labels = seq( 0, 12, 3))+
     scale_y_continuous( expand = c(0, 0), limits = c( 0, 50))+
     labs(x = "Months of Follow-up ",
@@ -1239,11 +1244,11 @@ plot_func <- function(){
               x=unit(0, "cm"), y=unit(0.4, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
-    upViewport()
     
-    pushViewport(viewport(layout.pos.row=3,
-                          layout.pos.col=2))
-    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    # upViewport()
+    # pushViewport(viewport(layout.pos.row=3,
+    #                       layout.pos.col=2))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
     
     upViewport()
     pushViewport(viewport(layout.pos.row=2,
@@ -1268,53 +1273,53 @@ plot_func <- function(){
               gp = gpar( fontsize = 6))
     
     #codeine 
-    grid.text(table_data$n.risk[1],
+    grid.text(main_table_MI$n.risk[1],
               x=unit(1, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[2],
+    grid.text(main_table_MI$n.risk[2],
               x=unit(2.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[3],
+    grid.text(main_table_MI$n.risk[3],
               x=unit(3.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[4],
+    grid.text(main_table_MI$n.risk[4],
               x=unit(5.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[5],
+    grid.text(main_table_MI$n.risk[5],
               x=unit(6.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
     #tramadol 
-    grid.text(table_data$n.risk[6],
+    grid.text(main_table_MI$n.risk[6],
               x=unit(1, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[7],
+    grid.text(main_table_MI$n.risk[7],
               x=unit(2.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[8],
+    grid.text(main_table_MI$n.risk[8],
               x=unit(3.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[9],
+    grid.text(main_table_MI$n.risk[9],
               x=unit(5.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[10],
+    grid.text(main_table_MI$n.risk[10],
               x=unit(6.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
@@ -1335,11 +1340,11 @@ plot_func <- function(){
               x=unit(0, "cm"), y=unit(0.4, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
-    upViewport()
     
-    pushViewport(viewport(layout.pos.row=3,
-                          layout.pos.col=2))
-    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    # upViewport()
+    # pushViewport(viewport(layout.pos.row=3,
+    #                       layout.pos.col=2))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
     
     upViewport()
     pushViewport(viewport(layout.pos.row=2,
@@ -1364,53 +1369,53 @@ plot_func <- function(){
               gp = gpar( fontsize = 6))
     
     #codeine 
-    grid.text(table_data$n.risk[1],
+    grid.text(main_table_stroke$n.risk[1],
               x=unit(1, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[2],
+    grid.text(main_table_stroke$n.risk[2],
               x=unit(2.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[3],
+    grid.text(main_table_stroke$n.risk[3],
               x=unit(3.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[4],
+    grid.text(main_table_stroke$n.risk[4],
               x=unit(5.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[5],
+    grid.text(main_table_stroke$n.risk[5],
               x=unit(6.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
     #tramadol 
-    grid.text(table_data$n.risk[6],
+    grid.text(main_table_stroke$n.risk[6],
               x=unit(1, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[7],
+    grid.text(main_table_stroke$n.risk[7],
               x=unit(2.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[8],
+    grid.text(main_table_stroke$n.risk[8],
               x=unit(3.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[9],
+    grid.text(main_table_stroke$n.risk[9],
               x=unit(5.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[10],
+    grid.text(main_table_stroke$n.risk[10],
               x=unit(6.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
@@ -1431,11 +1436,11 @@ plot_func <- function(){
               x=unit(0, "cm"), y=unit(0.4, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
-    upViewport()
     
-    pushViewport(viewport(layout.pos.row=6,
-                          layout.pos.col=2))
-    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    # upViewport()
+    # pushViewport(viewport(layout.pos.row=6,
+    #                       layout.pos.col=2))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
     
     upViewport()
     pushViewport(viewport(layout.pos.row=5,
@@ -1460,53 +1465,53 @@ plot_func <- function(){
               gp = gpar( fontsize = 6))
     
     #codeine 
-    grid.text(table_data$n.risk[1],
+    grid.text(main_table_Fracture$n.risk[1],
               x=unit(1, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[2],
+    grid.text(main_table_Fracture$n.risk[2],
               x=unit(2.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[3],
+    grid.text(main_table_Fracture$n.risk[3],
               x=unit(3.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[4],
+    grid.text(main_table_Fracture$n.risk[4],
               x=unit(5.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[5],
+    grid.text(main_table_Fracture$n.risk[5],
               x=unit(6.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
     #tramadol 
-    grid.text(table_data$n.risk[6],
+    grid.text(main_table_Fracture$n.risk[6],
               x=unit(1, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[7],
+    grid.text(main_table_Fracture$n.risk[7],
               x=unit(2.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[8],
+    grid.text(main_table_Fracture$n.risk[8],
               x=unit(3.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[9],
+    grid.text(main_table_Fracture$n.risk[9],
               x=unit(5.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[10],
+    grid.text(main_table_Fracture$n.risk[10],
               x=unit(6.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
@@ -1527,11 +1532,11 @@ plot_func <- function(){
               x=unit(0, "cm"), y=unit(0.4, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
-    upViewport()
     
-    pushViewport(viewport(layout.pos.row=6,
-                          layout.pos.col=2))
-    grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
+    # upViewport()
+    # pushViewport(viewport(layout.pos.row=6,
+    #                       layout.pos.col=2))
+    # grid.rect(gp=gpar(col=NA, fill=rgb(1,0,0,.5)))
     
     upViewport()
     pushViewport(viewport(layout.pos.row=5,
@@ -1556,53 +1561,53 @@ plot_func <- function(){
               gp = gpar( fontsize = 6))
     
     #codeine 
-    grid.text(table_data$n.risk[1],
+    grid.text(main_table_mortality$n.risk[1],
               x=unit(1, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[2],
+    grid.text(main_table_mortality$n.risk[2],
               x=unit(2.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[3],
+    grid.text(main_table_mortality$n.risk[3],
               x=unit(3.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[4],
+    grid.text(main_table_mortality$n.risk[4],
               x=unit(5.3, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[5],
+    grid.text(main_table_mortality$n.risk[5],
               x=unit(6.8, "cm"), y=unit(0, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
     #tramadol 
-    grid.text(table_data$n.risk[6],
+    grid.text(main_table_mortality$n.risk[6],
               x=unit(1, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[7],
+    grid.text(main_table_mortality$n.risk[7],
               x=unit(2.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[8],
+    grid.text(main_table_mortality$n.risk[8],
               x=unit(3.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[9],
+    grid.text(main_table_mortality$n.risk[9],
               x=unit(5.3, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
     
-    grid.text(table_data$n.risk[10],
+    grid.text(main_table_mortality$n.risk[10],
               x=unit(6.8, "cm"), y=unit(0.3, "cm"),
               just=c("left", "bottom"),
               gp = gpar( fontsize = 6))
@@ -1616,16 +1621,20 @@ plot_func <- function(){
   
 }
 
-# tiff(file = 'Figures/survival_curve.tiff',
-#      units = "cm",
-#      width = 16,
-#      height = 16,
-#      compression = "lzw",
-#      res = 800)
+tiff(file = 'Figures/survival_curve.tiff',
+     units = "cm",
+     width = 16,
+     height = 16,
+     compression = "none",
+     res = 800)
+
+# pdf(file = 'Figures/survival_curve.pdf',
+#      width = 6.4,
+#      height = 6.4)
 
 plot_func()
 
-# dev.off()
+dev.off()
 
 
 
