@@ -72,64 +72,95 @@ Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_
 #derived datasets
 load("R_datasets/stage_two_saved_data.RData")
 # Baseline table one ----------------------------------------------------------
-
-
+dput(names(Base_new_user_cohort_probability))
 # data preparation including label, unit, format etc.
 
 #first check the missing value of each variable
 
-sapply(Base_new_user_cohort_imputed, function(x)sum(is.na(x)))
+sapply(Base_new_user_cohort_two_year_wash, function(x)sum(is.na(x)))
 
 Before_match_cohort <- 
-  Base_new_user_cohort_probability %>% 
-  mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
+  Base_new_user_cohort_two_year_wash %>% 
+  mutate( age_group = factor(case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                  initiation_age >= 40 & initiation_age < 60 ~ "40-59",
-                                 initiation_age >= 60  ~ ">=60",
-                                 TRUE ~ "<18")) %>%
-  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59",  ">=60", "<18"))) %>% 
-  mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
+                                 initiation_age >= 60  ~ ">=60"), levels = c( "18-39", "40-59",  ">=60"))) %>%
+  mutate( economic_level = factor( economic_level, levels = c( "U1", "U2", "U3", "U4", "U5"))) %>% 
+  mutate( rural = factor( rural, levels = c( "U", "R", "MS"))) %>% #must keep more than 2 categories
+  mutate( BMI_group = factor(case_when( BMI_value < 18.5 ~ "Underweight",
                                  BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
                                  BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
-                                 BMI_value >= 30  ~ "Obese",
-                                 TRUE ~ "Ms")) %>% 
-  mutate( BMI_group = factor( BMI_group, levels = c( "Underweight", "Normal", "Overweight", "Obese", "Ms"))) %>% 
-  mutate( rural = factor( rural, levels = c( "U", "R", "Ms")))
+                                 BMI_value >= 30  ~ "Obese"), levels = c( "Underweight", "Normal", "Overweight", "Obese"))) %>% 
+  mutate( Demographics = 1,
+          Lifestyle_factors = 1,
+          Medical_conditions = 1,
+          Cardiovascular_diseases = 1,
+          Musculoskeletal_diseases = 1,
+          Chronic_Pain = 1,
+          Other_conditions = 1,
+          Concomitant_medication = 1,
+          Psychotropic_drug = 1,
+          Other_analgesics = 1,
+          Other_opioids = 1,
+          Health_care_utilization = 1)
+
   
 
 After_match_cohort <- 
-  Mathced_new_user_cohort %>% 
-  mutate( age_group = case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
-                                 initiation_age >= 40 & initiation_age < 60 ~ "40-59",
-                                 initiation_age >= 60  ~ ">=60",
-                                 TRUE ~ "<18")) %>%
-  mutate( age_group = factor( age_group, levels = c( "18-39", "40-59",  ">=60", "<18"))) %>% 
-  mutate( BMI_group = case_when( BMI_value < 18.5 ~ "Underweight",
-                                 BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
-                                 BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
-                                 BMI_value >= 30  ~ "Obese",
-                                 TRUE ~ "Ms")) %>% 
-  mutate( BMI_group = factor( BMI_group, levels = c( "Underweight", "Normal", "Overweight", "Obese", "Ms"))) %>% 
-  mutate( rural = factor( rural, levels = c( "U", "R", "Ms")))
+  Mathced_new_user_cohort_two_year_wash %>% 
+  mutate( age_group = factor(case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
+                                        initiation_age >= 40 & initiation_age < 60 ~ "40-59",
+                                        initiation_age >= 60  ~ ">=60"), levels = c( "18-39", "40-59",  ">=60"))) %>%
+  mutate( economic_level = factor( economic_level, levels = c( "U1", "U2", "U3", "U4", "U5"))) %>% 
+  mutate( rural = factor( rural, levels = c( "U", "R", "MS"))) %>% 
+  mutate( BMI_group = factor(case_when( BMI_value < 18.5 ~ "Underweight",
+                                        BMI_value >= 18.5 & BMI_value < 25 ~ "Normal",
+                                        BMI_value >= 25 & BMI_value < 30 ~ "Overweight",
+                                        BMI_value >= 30  ~ "Obese"), levels = c( "Underweight", "Normal", "Overweight", "Obese"))) %>% 
+  mutate( Demographics = 1,
+          Lifestyle_factors = 1,
+          Medical_conditions = 1,
+          Cardiovascular_diseases = 1,
+          Musculoskeletal_diseases = 1,
+          Chronic_Pain = 1,
+          Other_conditions = 1,
+          Concomitant_medication = 1,
+          Psychotropic_drug = 1,
+          Other_analgesics = 1,
+          Other_opioids = 1,
+          Health_care_utilization = 1)
 
-
+  
+  
 
 ## Vector of variables to summarize
-myVars <- c("age_group", "initiation_age", "sex", "economic_level", "rural", 
+myVars <- c("Demographics",
+            "initiation_age","age_group",  "sex", "economic_level", "rural", 
             # lifestyle factors
-            "BMI_group", "BMI_value", 
+            "Lifestyle_factors",
+            "BMI_value", "BMI_group", 
             # medical conditions
+            "Medical_conditions",
             "cancer",
-            "peripheral_vascular_disease", "cardiac_arrhythmia",  "angina", "tia", 
-             "oa", "osteoporosis", "fybromialgia","rheumatoid_arthritis","other_musculskeletal_disorders",
+            "Chronic_Pain",
             "back_pain","neck_pain", 
+            "Cardiovascular_diseases",
+            "peripheral_vascular_disease", "cardiac_arrhythmia",  "angina", "tia", 
+            "Musculoskeletal_diseases",
+             "oa", "osteoporosis", "fybromialgia","rheumatoid_arthritis","other_musculskeletal_disorders",
+            "Other_conditions",
             "diabetes","chronic_liver_disease","chronic_kidney_disease", "cough", "dyspnea","pulmonary_oedema","diarrhoea", 
             "malabsorption_disorder",  "copd", "neurologic_pathologies", "parkinson_disease","alzheimer_disease", "burn_injuries", "surgery", "traffic", 
             #CCI
-            "windex", 
+            "cci_group", 
             #medications
+            "Concomitant_medication",
+            "Psychotropic_drug",
             "hypnotics","benzodiazepines", "SSIR",  "anticonvulsant", 
-            "Naproxeno","Diclofenaco","Ibuprofeno", "Celecoxib","NSAID","Paracetamol", "Metamizole", "fentanyl", "morphine",   
+            "Other_analgesics",
+            "Naproxeno","Diclofenaco","Ibuprofeno", "Celecoxib","NSAID","Paracetamol", "Metamizole", "fentanyl", "morphine",
+            "Other_opioids",
             #health utilisation
+            "Health_care_utilization",
             "GP_visits", "HP_admissions")
 
 ## Vector of categorical variables that need transformation
@@ -148,7 +179,7 @@ myVars <- c("age_group", "initiation_age", "sex", "economic_level", "rural",
 
 
 summary_before <- 
-  CreateTableOne( data = Before_match_cohort, vars = myVars, 
+  CreateTableOne( data = Before_match_cohort, vars = myVars, includeNA = TRUE,
                 strata = "first_bill_drug",
                 test = FALSE) %>% 
   print( smd = TRUE) %>% 

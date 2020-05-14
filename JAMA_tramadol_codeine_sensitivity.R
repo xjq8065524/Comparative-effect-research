@@ -42,7 +42,6 @@ library( comorbidity)
 library(fmsb)
 library( grid)
 library( devEMF)
-library( condSURV)
 # library(fastDummies)
 
 getwd()
@@ -89,7 +88,6 @@ check_dup_billing <- distinct(billing, idp, billing_cod, bill_date, .keep_all = 
 check_dup_diagnosis <- distinct(diagnosis_complete, idp, dia_cod, dia_start_date, .keep_all = TRUE) #(confirm with duplicate row)
 check_dup_social_variables <- distinct(social_variables, idp, economic_level, rural, .keep_all = TRUE) #(confirm no duplicate row)
 check_dup_clinical_variables <- distinct(clinical_variables,idp,clinical_cod, clinical_date, val, .keep_all = TRUE) #(confirm no duplicate row)
-
 
 # Baseline covariates preparation -----------------------------------------
 # set.seed(1)
@@ -403,7 +401,7 @@ sapply(Baseline_on_treat_dataset, function(x)sum(is.na(x)))
 #save(Baseline_on_treat_dataset, file="R_datasets/Baseline_on_treat_dataset.RData")
 #==================save=============================================#
 
-# source population -----------------------------------------------------
+# source population (two_year waskout period) -----------------------------------------------------
 # set.seed(1)
 # sub_Denominator <- sample_frac(Denominator_data, 0.1)
 #=======================================================#
@@ -438,7 +436,7 @@ database_population_codeine <-
   rename( Drug_name = English_label) %>% 
   filter( Drug_name %in% c("tramadol", "codeine")) %>% 
   group_by( idp) %>% 
-  mutate( index_look_back = case_when( any(bill_date < first_bill_time & bill_date >= first_bill_time - 365 ) ~ 1,
+  mutate( index_look_back = case_when( any(bill_date < first_bill_time & bill_date >= first_bill_time - 365 * 2 ) ~ 1,
                                        TRUE ~ 0)) %>% 
   ungroup() %>% 
   distinct( idp, first_bill_time, first_bill_drug, index_double_user, index_look_back) %>% 
@@ -455,7 +453,7 @@ database_population_codeine <-
   # filter age >= 18
   mutate( index_age = case_when( initiation_age < 18 ~ 1,
                                  TRUE ~ 0),
-          index_continuous_enrolment = case_when( initiation_gap < 365 ~ 1,
+          index_continuous_enrolment = case_when( initiation_gap < 365 * 2 ~ 1,
                                  TRUE ~ 0)) %>% 
   
 #==================================================================#
@@ -485,7 +483,7 @@ study_summary <-
              index_history_outcomes = sum(index_history_outcomes))
 
 
-Base_new_user_idp <- 
+Base_new_user_idp_two_year_wash <- 
   study_idp %>% 
   filter( index_age == 0, # Continuous enrolment in the database < 1 year before the entry date 
           index_look_back == 0,# withou dispensation one year before index date
@@ -498,8 +496,8 @@ load("R_datasets/database_population_codeine.RData")
 #==================save=============================================#
 
 # Link to baseline variables ----------------------------------------
-Base_new_user_cohort <- 
-  Base_new_user_idp %>% 
+Base_new_user_cohort_two_year_wash <- 
+  Base_new_user_idp_two_year_wash %>% 
   select( idp, first_bill_drug) %>% 
   left_join( Baseline_covariate_complete, by = "idp") %>% 
   mutate( first_bill_drug = case_when( first_bill_drug == "codeine" ~ 0,
@@ -507,15 +505,15 @@ Base_new_user_cohort <-
 
 sapply( Base_new_user_cohort, function(x)sum(is.na(x)))
 
-# save(Base_new_user_cohort, file="Base_new_user_cohort.RData")
+save(Base_new_user_cohort_two_year_wash, file="Base_new_user_cohort_two_year_wash.RData")
 
 # Missing data imputation -------------------------------------------------
 imputation_data <- 
-  Base_new_user_cohort %>% 
+  Base_new_user_cohort_two_year_wash %>% 
   select( -idp , -first_bill_drug) 
 
 mice_model <- mice( data = imputation_data, m = 1, maxit = 2, seed = 500)
-Base_new_user_cohort_imputed <- complete(mice_model,1) %>% mutate( idp = Base_new_user_cohort$idp, first_bill_drug = Base_new_user_cohort$first_bill_drug)
+Base_new_user_cohort_imputed_two_year_wash <- complete(mice_model,1) %>% mutate( idp = Base_new_user_cohort_two_year_wash$idp, first_bill_drug = Base_new_user_cohort_two_year_wash$first_bill_drug)
 
 #==================save=============================================#
 # save(Base_new_user_cohort_imputed, file="R_datasets/Base_new_user_cohort_imputed.RData")
@@ -545,10 +543,10 @@ impute_covariate <-
 ## Fit model
 psModel <- glm(reformulate(termlabels = impute_covariate, response = "first_bill_drug"),
                family  = binomial(link = "logit"),
-               data    = Base_new_user_cohort_imputed)
+               data    = Base_new_user_cohort_imputed_two_year_wash)
 
 Base_new_user_cohort_probability <- 
-  Base_new_user_cohort_imputed %>% 
+  Base_new_user_cohort_imputed_two_year_wash %>% 
   mutate( P_tramadol = psModel$fitted.values,
           P_codeine = 1 - psModel$fitted.values)
 
@@ -564,11 +562,11 @@ listMatch <- Matching::Match(Tr       = Base_new_user_cohort_probability$first_b
                              version  = "fast")
 
 
-Mathced_new_user_cohort <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
+Mathced_new_user_cohort_two_year_wash <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
 
 #==================save=============================================#
 load("R_datasets/Mathced_new_user_cohort.RData")
-# save(Mathced_new_user_cohort, file="R_datasets/Mathced_new_user_cohort.RData")
+# save(Mathced_new_user_cohort_two_year_wash, file="R_datasets/Mathced_new_user_cohort_two_year_wash.RData")
 #==================save=============================================#
 
 
@@ -1000,7 +998,7 @@ OT_survial_summary <-
 
 # Cox-model outcome stratification (ITT) ------------------------------------------------
 cox_dataset_ITT <- 
-  Mathced_new_user_cohort %>% 
+  Mathced_new_user_cohort_two_year_wash %>% 
   select( idp, first_bill_drug) %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  
@@ -1064,7 +1062,8 @@ summary_table_func <- function( inputdata){
     mutate( low_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[1] * 1000) %>% 
     mutate( high_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[2] * 1000) %>% 
     
-    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
+    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2),
+            total_follow = substring(total_follow, 1,str_locate(as.character(total_follow), "[.]")[,1] -1) )%>% 
     mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
             dif_CI = paste(substring(dif, 1,str_locate(as.character(dif), "[.]")[,1] + 2), " (",
                            substring(low_dif, 1,str_locate(as.character(low_dif), "[.]")[,1] + 2), " to ",
@@ -1082,7 +1081,13 @@ ITT_survial_summary <-
   left_join( filter( ITT_survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
   mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
   left_join( ITT_survial_hazard, by = "variable") %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate( RD_estimate = as.numeric(rate.x) * (estimate - 1  ),
+          RD_lower = as.numeric(rate.x) * (lower - 1  ),
+          RD_upper = as.numeric(rate.x) * (upper - 1  ),) %>% 
+  mutate( RD_CI = paste(substring(RD_estimate, 1,str_locate(as.character(RD_estimate), "[.]")[,1] + 2), " (",
+                        substring(RD_lower, 1,str_locate(as.character(RD_lower), "[.]")[,1] + 2), " to ",
+                        substring(RD_upper, 1,str_locate(as.character(RD_upper), "[.]")[,1] + 2), ")", sep = ""))
 
 
 # Cox-model outcome phase stratification (ITT) ------------------------------------------------
@@ -1179,7 +1184,7 @@ ITT_survial_phrase_summary <-
 
 # Cox-model interaction stratification(ITT) ------------------------------------------------
 cox_interraction_ITT <- 
-  Mathced_new_user_cohort %>% 
+  Mathced_new_user_cohort_two_year_wash %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>% 
   filter( outcome_label %in% c("composite_CVD", "fracturas", "all_cause_mortality"), group_label == "one_year_outcome_dataset") %>% 
@@ -1215,7 +1220,7 @@ cox_dataset_interaction <-   list( overall = cox_interraction_ITT,
                                    )) %>% 
   mutate( variable = paste(outcome_label, group_label, sep = "."))
 
-table(cox_dataset_interaction$variable)
+# table(cox_dataset_interaction$variable)
 
 res.separate_func <- function(input){
   lapply( split(input, list(input$separate_label, input$variable)),
@@ -1972,18 +1977,10 @@ ggplot( data = aa, aes( x = group_label, y = dif))+
 #==================================================================#
 Table2 <- 
   ITT_survial_summary %>% 
-  select( outcome_label,  events.y,  rate.y, events.x,rate.x,CI, dif_CI.y,  P_value_format) %>% 
+  select( outcome_label,  n.y, total_follow.y, events.y,  rate.y, n.x, total_follow.x, events.x,rate.x,  CI, RD_CI, P_value_format) %>% 
   mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality",
                                                               "falls", "constipation",  "sleep_disorders", "delirium"))) %>% 
   arrange( outcome_label)
-
-
-Table2 <- 
-  ITT_survial_phrase_summary %>% 
-  select( outcome_label, group_label, n.y,  events.y, rate.y, n.x, events.x, rate.x, CI) %>% 
-  mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality")),
-          group_label = factor( group_label, levels = c("one_year_outcome_dataset", "two_year_outcome_dataset",  "three_year_outcome_dataset"))) %>% 
-  arrange( outcome_label, group_label)
 
 
 

@@ -352,7 +352,7 @@ dev.off()
 
 
 # Interaction in ITT ------------------------------------------------------
-c( "myocardial_infarction", "stroke", "fracturas", "all_cause_mortality")
+c("composite_CVD", "fracturas", "all_cause_mortality")
 
 plot_data_preparation <- function( outcome){
   interaction_forest <- 
@@ -361,14 +361,14 @@ plot_data_preparation <- function( outcome){
     ungroup() %>% 
     add_row( outcome_label = c(unique(survial_summary$outcome_label))) %>% 
     mutate( outcome_label = factor( outcome_label, 
-                                    levels = c("initiation_age", "sex",  "cancer", "oa","back_pain", "neck_pain", "windex", "Ibuprofeno", "overall" ),
+                                    levels = c("initiation_age", "sex",  "cancer", "oa","back_pain", "neck_pain", "cci_group", "Ibuprofeno", "overall" ),
                                     labels = c("Age", "Sex",  "Cancer", "OA", "Back pain", "Neck pain",  "CCI", "NSAIDs", "Overall"))) %>% 
     #in order to set NA as an separate factor level
     mutate( group_label = case_when(is.na(group_label) ~ " ",
                                     TRUE ~ group_label)) %>% 
     mutate( group_label = factor(group_label,
-                                 levels = c(" ", "overall", "18-39", "40-59", "60-79", ">=80","H", "D", "0", "1", "0dis", "1-2dis", "3-4dis", ">=5dis"),
-                                 labels = c(" ", "Overall", "  18-39", "  40-59", "  60-79", " >=80", "  Male", "  Female", "  No", "  Yes", "  0", "  1-2", "  3-4", "  >=5"))) %>% 
+                                 levels = c(" ", "overall", "18-39", "40-59", ">=60", "H", "D",  "1", "0", "0dis", "1-2dis", ">=3dis"),
+                                 labels = c(" ", "Overall", "  18-39", "  40-59", "  >=60", "  Male", "  Female", "  Yes", "  No",  "  0", "  1-2", "  >=3"))) %>% 
     
     mutate( label = case_when( group_label == " " ~ as.character(outcome_label),
                                TRUE ~ as.character(group_label))) %>% 
@@ -397,8 +397,11 @@ plot_data_preparation <- function( outcome){
   
   tabletext<-cbind( 
     c("", "", "Subgroup    ", interaction_forest$label),
-    c("No. of events", "(1000 Person-years)", "Tramadol", paste(interaction_forest$events.y, " (",interaction_forest$rate.y, ")", sep = "")),
-    c("  ", "", "Codeine", paste(interaction_forest$events.x, " (", interaction_forest$rate.x, ")", sep = "")),
+    c("Tramadol/Codeine", "No. of", "Patients", paste(interaction_forest$n.y, " /",interaction_forest$n.x,  sep = "")),
+    c("", "No. of", "Events     ", paste(interaction_forest$events.y, " /",interaction_forest$events.x,  sep = "")),
+    c("", "Incidence", "Rate  ", paste(interaction_forest$rate.y, " /",interaction_forest$rate.x,  sep = "")),
+    c("", "Risk difference", "(95% CI)", interaction_forest$RD_CI),
+    c("", "Hazard ratio", "(95% CI)", interaction_forest$CI),
     c(rep("  ", nrow(interaction_forest) + 3)))
   
   
@@ -409,7 +412,7 @@ plot_data_preparation <- function( outcome){
   #   c("  ", "No. of events", "per 1000 Person-years", paste(interaction_forest$rate.y, interaction_forest$rate.x, sep = "/")))
   #   # c("Tramadol vs Codeine", "Hazard ratio", "(95% CI)", interaction_forest$CI))
   
-  tabletext[tabletext == "NA (NA)"] <- NA
+  tabletext[tabletext == "NA /NA"] <- NA
   
   # tabletext<-cbind( 
   #   c("", "Subgroup", "", interaction_forest$label),
@@ -423,22 +426,21 @@ plot_data_preparation <- function( outcome){
   return(plot_data = list(interaction_forest = interaction_forest, graph_data = graph_data, tabletext = tabletext))
 }
 
-
-myocardial_infarction <- plot_data_preparation( outcome = "myocardial_infarction")
-stroke <- plot_data_preparation( outcome = "stroke")
+composite_CVD <- plot_data_preparation( outcome = "composite_CVD")
 fracturas <- plot_data_preparation( outcome = "fracturas")
 all_cause_mortality <- plot_data_preparation( outcome = "all_cause_mortality")
+
 
 
 plot_func_interaction <- function(input){
   forestplot(input$tabletext, 
              input$graph_data,
-             align = c("l","l","l"),
-             new_page = FALSE,
+             align = c("l","l","l","l", "c", "c"),
+             new_page = TRUE,
              
-             txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", cex = 0.45),
-                               ticks = gpar( fontfamily = "sans", cex = 0.45),
-                               xlab = gpar( fontfamily = "sans", cex = 0.45)),
+             txt_gp = fpTxtGp( label = gpar( fontfamily = "sans"),
+                               ticks = gpar( fontfamily = "sans"),
+                               xlab = gpar( fontfamily = "sans")),
              is.summary = c(rep(TRUE,3), input$interaction_forest$bold),
              boxsize = c(rep(TRUE,3), input$interaction_forest$box),
              col=fpColors( box=c("royalblue"), 
@@ -446,15 +448,16 @@ plot_func_interaction <- function(input){
                            zero = "black", 
                            summary = "royalblue"),
              
-             colgap = unit(0, "mm"),
+             # colgap = unit(0, "mm"),
+             graphwidth = unit(50, "mm"),
+             # lineheight = unit( 3.2, "mm"),
              
-             graphwidth = unit(30, "mm"),
-             lineheight = unit( 3.2, "mm"),
-             
-             graph.pos = 5,
+             graph.pos = 7,
              hrzl_lines = list(
-               "3" = gpar(lty=1, lwd=0.5, columns=c(2:3)),
-               "4" = gpar(lty=1, lwd=0.5, columns=c(1: 3))
+               "1" = gpar(lty=1, lwd=0.5, columns=c(1:7)),
+               "2" = gpar(lty=1, lwd=0.5, columns=c(2:4)),
+               # "3" = gpar(lty=1, lwd=0.5, columns=c(2:6)),
+               "4" = gpar(lty=1, lwd=0.5, columns=c(1: 6))
                # "31" = gpar(lty=1, lwd=0.3, columns=c(4))
                ),
              lwd.xaxis = 0.5,
@@ -467,20 +470,18 @@ plot_func_interaction <- function(input){
              xlog=TRUE)
 }
 
-
-plot_func_interaction(input = myocardial_infarction)
-plot_func_interaction(input = stroke)
+plot_func_interaction(input = composite_CVD)
 plot_func_interaction(input = fracturas)
 plot_func_interaction(input = all_cause_mortality)
 
 
 
-tiff(file = 'Figures/forestplot_aa.tiff',
-     units = "cm",
-     width = 16,
-     height = 22,
-     compression = "lzw",
-     res = 800)
+# tiff(file = 'Figures/forestplot_aa.tiff',
+#      units = "cm",
+#      width = 16,
+#      height = 22,
+#      compression = "lzw",
+#      res = 800)
 
 
 
@@ -572,3 +573,36 @@ trans_breaks("log2", n = 5,function(x) 2^x)(c(1, 4))
 
 
 
+
+
+
+
+# New_package based ITT ---------------------------------------------------
+help( forest)
+data(Olkin95)
+m1 <- metabin(event.e, n.e, event.c, n.c,
+              data = Olkin95, subset = c(41, 47, 51, 59),
+              sm = "RR", method = "I",
+              studlab = paste(author, year))
+
+
+
+m1$main
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+forest(m1)
