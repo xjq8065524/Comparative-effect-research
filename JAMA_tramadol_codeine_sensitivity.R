@@ -469,7 +469,7 @@ database_population_codeine <-
   distinct( idp, first_bill_time, first_bill_drug, index_double_user, index_look_back, index_age, index_continuous_enrolment, index_history_outcomes) %>% 
   ungroup()
 
-# flow_chart cohort -----------------------------------------------------------
+# flow_chart cohort (two_year waskout period)-----------------------------------------------------------
 study_idp <- 
   database_population_codeine %>% 
   filter( index_double_user ==0)
@@ -491,11 +491,11 @@ Base_new_user_idp_two_year_wash <-
           index_history_outcomes == 0)  # No outcomes of interest previous or at the time of the entry date
 
 #==================save=============================================#
-load("R_datasets/database_population_codeine.RData")
-# save(database_population_codeine, file="R_datasets/database_population_codeine.RData")
+load("R_datasets/Base_new_user_idp_two_year_wash.RData")
+# save(Base_new_user_idp_two_year_wash, file="R_datasets/Base_new_user_idp_two_year_wash.RData")
 #==================save=============================================#
 
-# Link to baseline variables ----------------------------------------
+# Link to baseline variables (two_year waskout period) ----------------------------------------
 Base_new_user_cohort_two_year_wash <- 
   Base_new_user_idp_two_year_wash %>% 
   select( idp, first_bill_drug) %>% 
@@ -507,21 +507,37 @@ sapply( Base_new_user_cohort, function(x)sum(is.na(x)))
 
 save(Base_new_user_cohort_two_year_wash, file="Base_new_user_cohort_two_year_wash.RData")
 
+# Link to baseline variables (single ingredient drug) ----------------------------------------
+Base_new_user_cohort_single <- 
+  Base_new_user_idp %>% 
+  select( idp) %>%
+  left_join( select( First_billing_dataset, idp, billing_cod, first_bill_drug), by = "idp" ) %>% 
+  left_join( Baseline_covariate_complete, by = "idp") %>% 
+  mutate( first_bill_drug = case_when( first_bill_drug == "codeine" ~ 0,
+                                       TRUE ~ 1)) %>% 
+  filter( billing_cod %in% c( "N02AX02", "R05DA04"))
+
+sapply( Base_new_user_cohort_single, function(x)sum(is.na(x)))
+
+save(Base_new_user_cohort_single, file="Base_new_user_cohort_single.RData")
+
 # Missing data imputation -------------------------------------------------
 imputation_data <- 
-  Base_new_user_cohort_two_year_wash %>% 
-  select( -idp , -first_bill_drug) 
+  Base_new_user_cohort_single %>% 
+  select( -idp , -first_bill_drug, -billing_cod) 
+names(imputation_data)
 
 mice_model <- mice( data = imputation_data, m = 1, maxit = 2, seed = 500)
-Base_new_user_cohort_imputed_two_year_wash <- complete(mice_model,1) %>% mutate( idp = Base_new_user_cohort_two_year_wash$idp, first_bill_drug = Base_new_user_cohort_two_year_wash$first_bill_drug)
+Base_new_user_cohort_imputed_single <- complete(mice_model,1) %>% mutate( idp = Base_new_user_cohort_single$idp, first_bill_drug = Base_new_user_cohort_single$first_bill_drug)
+
 
 #==================save=============================================#
-# save(Base_new_user_cohort_imputed, file="R_datasets/Base_new_user_cohort_imputed.RData")
+# save(Base_new_user_cohort_imputed_single, file="R_datasets/Base_new_user_cohort_imputed_single.RData")
 #==================save=============================================#
 
 # Propensity score modelling and matching ----------------------------------------------
 ## Get variables names
-dput( names( Base_new_user_cohort))
+dput( names( Base_new_user_cohort_imputed_single))
 
 impute_covariate <- 
   c( "sex", "economic_level", "rural", "initiation_age", 
@@ -543,10 +559,10 @@ impute_covariate <-
 ## Fit model
 psModel <- glm(reformulate(termlabels = impute_covariate, response = "first_bill_drug"),
                family  = binomial(link = "logit"),
-               data    = Base_new_user_cohort_imputed_two_year_wash)
+               data    = Base_new_user_cohort_imputed_single)
 
 Base_new_user_cohort_probability <- 
-  Base_new_user_cohort_imputed_two_year_wash %>% 
+  Base_new_user_cohort_imputed_single %>% 
   mutate( P_tramadol = psModel$fitted.values,
           P_codeine = 1 - psModel$fitted.values)
 
@@ -562,11 +578,11 @@ listMatch <- Matching::Match(Tr       = Base_new_user_cohort_probability$first_b
                              version  = "fast")
 
 
-Mathced_new_user_cohort_two_year_wash <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
+Mathced_new_user_cohort_single <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
 
 #==================save=============================================#
-load("R_datasets/Mathced_new_user_cohort.RData")
-# save(Mathced_new_user_cohort_two_year_wash, file="R_datasets/Mathced_new_user_cohort_two_year_wash.RData")
+# load("R_datasets/Mathced_new_user_cohort.RData")
+#save(Mathced_new_user_cohort_single, file="R_datasets/Mathced_new_user_cohort_single.RData")
 #==================save=============================================#
 
 
@@ -998,7 +1014,7 @@ OT_survial_summary <-
 
 # Cox-model outcome stratification (ITT) ------------------------------------------------
 cox_dataset_ITT <- 
-  Mathced_new_user_cohort_two_year_wash %>% 
+  Mathced_new_user_cohort_single %>% 
   select( idp, first_bill_drug) %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  

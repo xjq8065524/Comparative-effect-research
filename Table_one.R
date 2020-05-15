@@ -56,18 +56,6 @@ library(tableone)
 getwd()
 setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety/R codes/Comparative-effect-research")
 # load raw and label datasets -------------------------------------------------------
-#SIDIAP raw datasets
-load("D:/DPhil/Project_Opioid_use/Data/billing.RData")
-load("D:/DPhil/Project_Opioid_use/Data/diagnosis.RData")
-load("D:/DPhil/Project_Opioid_use/Data/demography.RData")
-load("D:/DPhil/Project_Opioid_use/Data/social_variables.RData")
-load("D:/DPhil/Project_Opioid_use/Data/clinical_variables.RData")
-Denominator_data <- read_delim("D:/DPhil/Data_raw/OPIODU/OPIOIDES_entregable_poblacio_denominadors_20191219_143606.txt", 
-                               delim = "|",
-                               col_names = TRUE)
-#dictionary datasets
-Dic_analgesics <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_analgesics.xlsx")
-Dic_CER_adverse_events <- read_excel("D:/DPhil/Project_Opioid_use/Notes/Dic_CER_adverse_events.xlsx")
 
 #derived datasets
 load("R_datasets/stage_two_saved_data.RData")
@@ -77,10 +65,10 @@ dput(names(Base_new_user_cohort_probability))
 
 #first check the missing value of each variable
 
-sapply(Base_new_user_cohort_two_year_wash, function(x)sum(is.na(x)))
+sapply(Base_new_user_cohort_imputed_single, function(x)sum(is.na(x)))
 
 Before_match_cohort <- 
-  Base_new_user_cohort_two_year_wash %>% 
+  Base_new_user_cohort_imputed_single %>% 
   mutate( age_group = factor(case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                  initiation_age >= 40 & initiation_age < 60 ~ "40-59",
                                  initiation_age >= 60  ~ ">=60"), levels = c( "18-39", "40-59",  ">=60"))) %>%
@@ -104,9 +92,9 @@ Before_match_cohort <-
           Health_care_utilization = 1)
 
   
-
+names(Before_match_cohort)
 After_match_cohort <- 
-  Mathced_new_user_cohort_two_year_wash %>% 
+  Mathced_new_user_cohort_single %>% 
   mutate( age_group = factor(case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                         initiation_age >= 40 & initiation_age < 60 ~ "40-59",
                                         initiation_age >= 60  ~ ">=60"), levels = c( "18-39", "40-59",  ">=60"))) %>%
@@ -204,5 +192,6 @@ summary_after <-
 
 
 summary_combine <- 
-  data.frame( summary_before, summary_after) 
+  summary_before %>% 
+  left_join( summary_after, by = "var_label") 
 
