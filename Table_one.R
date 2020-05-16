@@ -180,7 +180,7 @@ summary_before <-
   
 names(summary_before)
 summary_after <- 
-  CreateTableOne( data = After_match_cohort, vars = myVars, 
+  CreateTableOne( data = After_match_cohort, vars = myVars, includeNA = TRUE,
                   strata = "first_bill_drug",
                   test = FALSE) %>% 
   print( smd = TRUE) %>% 

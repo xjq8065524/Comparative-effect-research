@@ -50,6 +50,7 @@ setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety
 # attention: which biliing dataset is used
 load("D:/DPhil/Project_Opioid_use/Data/billing_delay.RData")
 # attention: which diagnosis dataset is used
+load("D:/DPhil/Project_Opioid_use/Data/prescription.RData")
 load("D:/DPhil/Project_Opioid_use/Data/diagnosis_complete.RData")
 load("D:/DPhil/Project_Opioid_use/Data/demography.RData")
 load("D:/DPhil/Project_Opioid_use/Data/social_variables.RData")
@@ -509,7 +510,7 @@ save(Base_new_user_cohort_two_year_wash, file="Base_new_user_cohort_two_year_was
 
 # Link to baseline variables (single ingredient drug) ----------------------------------------
 Base_new_user_cohort_single <- 
-  Base_new_user_idp %>% 
+  Base_new_user_cohort %>% 
   select( idp) %>%
   left_join( select( First_billing_dataset, idp, billing_cod, first_bill_drug), by = "idp" ) %>% 
   left_join( Baseline_covariate_complete, by = "idp") %>% 
@@ -517,9 +518,11 @@ Base_new_user_cohort_single <-
                                        TRUE ~ 1)) %>% 
   filter( billing_cod %in% c( "N02AX02", "R05DA04"))
 
+
+
 sapply( Base_new_user_cohort_single, function(x)sum(is.na(x)))
 
-save(Base_new_user_cohort_single, file="Base_new_user_cohort_single.RData")
+save(Base_new_user_cohort_single, file="R_datasets/Base_new_user_cohort_single.RData")
 
 # Missing data imputation -------------------------------------------------
 imputation_data <- 
@@ -532,7 +535,7 @@ Base_new_user_cohort_imputed_single <- complete(mice_model,1) %>% mutate( idp = 
 
 
 #==================save=============================================#
-# save(Base_new_user_cohort_imputed_single, file="R_datasets/Base_new_user_cohort_imputed_single.RData")
+save(Base_new_user_cohort_imputed_single, file="R_datasets/Base_new_user_cohort_imputed_single.RData")
 #==================save=============================================#
 
 # Propensity score modelling and matching ----------------------------------------------
@@ -582,8 +585,77 @@ Mathced_new_user_cohort_single <- Base_new_user_cohort_probability[unlist(listMa
 
 #==================save=============================================#
 # load("R_datasets/Mathced_new_user_cohort.RData")
-#save(Mathced_new_user_cohort_single, file="R_datasets/Mathced_new_user_cohort_single.RData")
+save(Mathced_new_user_cohort_single, file="R_datasets/Mathced_new_user_cohort_single.RData")
 #==================save=============================================#
+
+
+
+# Propensity score modelling and Asymmetrical PS trimming matching ----------------------------------------------
+## Get variables names
+dput( names( Base_new_user_cohort_imputed))
+
+impute_covariate <- 
+  c( "sex", "economic_level", "rural", "initiation_age", 
+     "BMI_value",
+     "alzheimer_disease", "angina", "back_pain", "burn_injuries", "cancer", "cardiac_arrhythmia", 
+     "chronic_kidney_disease", "chronic_liver_disease", "copd", "cough", 
+     "diabetes", "diarrhoea", "dyspnea", "fybromialgia", "malabsorption_disorder", 
+     "neck_pain", "neurologic_pathologies", "oa", "osteoporosis", 
+     "other_musculskeletal_disorders", "parkinson_disease", "peripheral_vascular_disease", 
+     "pulmonary_oedema", "rheumatoid_arthritis", "surgery", "tia", 
+     "traffic", 
+     "cci_group", 
+     "anticonvulsant", "benzodiazepines", "Celecoxib", 
+     "Diclofenaco", "fentanyl", "hypnotics", "Ibuprofeno", "Metamizole", 
+     "morphine", "Naproxeno", "NSAID", "Paracetamol", "SSIR", 
+     "GP_visits", "HP_admissions")
+
+
+## Fit model
+psModel <- glm(reformulate(termlabels = impute_covariate, response = "first_bill_drug"),
+               family  = binomial(link = "logit"),
+               data    = Base_new_user_cohort_imputed)
+
+Base_new_user_cohort_probability <- 
+  Base_new_user_cohort_imputed %>% 
+  mutate( P_tramadol = psModel$fitted.values,
+          P_codeine = 1 - psModel$fitted.values) %>% 
+  mutate( lower = unname(quantile( P_tramadol, 0.025)),
+          higher = unname(quantile( P_codeine, 0.975))) %>% 
+  filter( P_tramadol > lower & P_tramadol < higher,
+          P_codeine > lower & P_codeine < higher)
+
+
+PS_trimming <- function(){
+  start.time <- Sys.time()
+  print( start.time)
+  listMatch <- Matching::Match(Tr       = Base_new_user_cohort_probability$first_bill_drug,      # Need to be in 0,1
+                               ## logit of PS,i.e., log(PS/(1-PS)) as matching scale
+                               X        = log(Base_new_user_cohort_probability$P_tramadol / Base_new_user_cohort_probability$P_codeine),
+                               ## 1:1 matching
+                               M        = 1,
+                               ## caliper = 0.2 * SD(logit(PS))
+                               caliper  = 0.2,
+                               replace  = FALSE,
+                               ties     = FALSE,
+                               version  = "fast")
+  end.time <- Sys.time()
+  print( end.time - start.time)
+  return(listMatch)
+}
+
+listMatch <- PS_trimming()
+
+
+
+Mathced_new_user_cohort_PS_trimming <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
+
+#==================save=============================================#
+# load("R_datasets/Mathced_new_user_cohort.RData")
+# save(Mathced_new_user_cohort_PS_trimming, file="R_datasets/Mathced_new_user_cohort_PS_trimming.RData")
+#==================save=============================================#
+
+
 
 
 
@@ -1014,7 +1086,7 @@ OT_survial_summary <-
 
 # Cox-model outcome stratification (ITT) ------------------------------------------------
 cox_dataset_ITT <- 
-  Mathced_new_user_cohort_single %>% 
+  Mathced_new_user_cohort_PS_trimming %>% 
   select( idp, first_bill_drug) %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  
@@ -1989,17 +2061,14 @@ ggplot( data = aa, aes( x = group_label, y = dif))+
 
 # Prepare tables for the manuscripts --------------------------------------
 #==================================================================#
-# Table xx. Primary and exploratory outcomes among matched tramadol and codeine initiators over the next yeara. 
+# sensitivity table
 #==================================================================#
-Table2 <- 
+sensitivity_table <- 
   ITT_survial_summary %>% 
-  select( outcome_label,  n.y, total_follow.y, events.y,  rate.y, n.x, total_follow.x, events.x,rate.x,  CI, RD_CI, P_value_format) %>% 
+  select( outcome_label,  n.y, total_follow.y, events.y,  rate.y, n.x, total_follow.x, events.x,rate.x,  RD_CI, CI,  P_value_format) %>% 
   mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality",
                                                               "falls", "constipation",  "sleep_disorders", "delirium"))) %>% 
   arrange( outcome_label)
-
-
-
 
 
 # Conditional ITT test ----------------------------------------------------
