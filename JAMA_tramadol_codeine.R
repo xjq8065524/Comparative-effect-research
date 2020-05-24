@@ -1,7 +1,4 @@
 #### Set up library ----------------------------------------------------------
-install.packages("fmsb")
-install.packages( "condSURV")
-
 # memory.limit()
 # memory.limit(62468)
 library(dplyr)
@@ -91,6 +88,58 @@ check_dup_social_variables <- distinct(social_variables, idp, economic_level, ru
 check_dup_clinical_variables <- distinct(clinical_variables,idp,clinical_cod, clinical_date, val, .keep_all = TRUE) #(confirm no duplicate row)
 
 
+# Describe dispensation trend ---------------------------------------------
+Total_billing_dataset <- 
+  billing_delay %>% 
+  left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
+  rename( Drug_name = English_label) %>% 
+  filter( Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
+  left_join( demography, by = "idp") %>% 
+  mutate( bill_age = as.numeric( difftime( bill_date, date_of_birth, units = "days")/365 )) %>% 
+  filter( bill_age >= 18) %>% 
+  mutate( bill_year = substring( bill_date,1,4)) 
+  
+trend_data <- 
+  Total_billing_dataset %>% 
+  mutate(Drug_name = factor(Drug_name,
+                       levels = c( "tramadol", "codeine"),
+                       labels = c( "Tramadol", "Codeine"))) %>% 
+  mutate( bill_year = as.numeric( bill_year)) %>% 
+  group_by( Drug_name, bill_year) %>% 
+  summarise( num_prescription = n()) %>% 
+  ungroup()
+
+trend_plot <- 
+  ggplot( trend_data, aes( x= bill_year,y= num_prescription, group = Drug_name, fill = Drug_name)) +
+  geom_area( )+
+  scale_fill_manual(values = c("#AD002AFF", "#FDAF91FF","#42B540FF" ,"#0099B4FF"))+
+  scale_y_continuous(expand = c(0,0), limit = c(0, 500000), labels = function(x) format(x, scientific = FALSE))+
+  scale_x_continuous(expand = c(0,0), breaks = c(2007:2017))+
+  labs(x = "Year",
+       y = "Number of presriptions\n")+
+  # scale_color_lancet()+
+  guides( fill = guide_legend( title = NULL,
+                               keywidth = 0.8,
+                               keyheight  = 0.8))+
+  theme(
+    text = element_text(family = "sans" ),
+    panel.background = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    # plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+    
+    axis.line = element_line( size = 0.2),
+    axis.ticks = element_line( size = 0.2),
+    axis.text = element_text(colour = "black", size = 6),
+    axis.title = element_text(margin = margin(t = 0, r = 0, b = 0, l = 0), size = 8),
+    
+    legend.position = c(0.15,0.9),
+    legend.text = element_text( size = 6),
+    aspect.ratio = 0.7) 
+
+trend_plot
+
+
 # Baseline covariates preparation -----------------------------------------
 # set.seed(1)
 # sub_Denominator <- sample_frac(Denominator_data, 0.1)
@@ -177,12 +226,14 @@ Baseline_medical_condition_dataset <-
                                          TRUE ~ "Other_or_non_commorbidities")) %>%
   distinct(idp, commorbidity_label, commorbidities_index_records) %>% 
   spread(commorbidity_label, commorbidities_index_records, fill = 0) %>% 
-  select( -Other_or_non_commorbidities)
+  select( -Other_or_non_commorbidities) %>% 
+  #create this variable for the convinience of subsequent analyses
+  mutate( any_MSK = pmax( fybromialgia, oa, rheumatoid_arthritis, osteoporosis, other_musculskeletal_disorders),
+          any_pain = pmax( neck_pain, back_pain))
 
+sapply(Baseline_medical_condition_dataset[,-1], function(x)sum(x)/length(x)*100)
 
 Baseline_medical_condition_dataset[, names(Baseline_medical_condition_dataset)[-1]] <- lapply(Baseline_medical_condition_dataset[, names(Baseline_medical_condition_dataset)[-1]], factor)
-
-# sapply(Baseline_medical_condition_dataset[,-1], function(x)sum(x)/length(x)*100)
 
 
 #===========================================================================#
@@ -202,12 +253,17 @@ Baseline_medication_dataset <-
                                          TRUE ~ "Other_drug")) %>%
   distinct(idp, medication_label, medication_index_records) %>% 
   spread( medication_label, medication_index_records, fill = 0) %>% 
-  select( -Other_drug)
-  
+  select( -Other_drug) %>% 
+  #create this variable for the convinience of subsequent analyses
+  mutate( any_NSAIDs = pmax( Celecoxib, Diclofenaco, Ibuprofeno, Naproxeno, NSAID, morphine, fentanyl),
+          any_Psychotropic= pmax( anticonvulsant, benzodiazepines, hypnotics, Metamizole))
+
+
+ 
+# sapply(Baseline_medication_dataset[,-1], function(x)sum(x)/length(x)*100) 
 
 Baseline_medication_dataset[, names(Baseline_medication_dataset)[-1]] <- lapply(Baseline_medication_dataset[, names(Baseline_medication_dataset)[-1]], factor)
 
-# sapply(Baseline_medication_dataset[,-1], function(x)sum(x)/length(x)*100)
 
 
 #===========================================================================#
@@ -262,18 +318,16 @@ Baseline_covariate_complete <-
   left_join( Baseline_medication_dataset, by = "idp") %>% 
   left_join( Baseline_health_utilisation_dataset, by = "idp")
 
-
-
 #==================save=============================================#
 # load("R_datasets/Baseline_dataset.RData")
-# save(First_billing_dataset,
-# Baseline_Demographic_dataset,
-# Baseline_Lefestyle_dataset,
-# Baseline_medical_condition_dataset,
-# Baseline_CCI_dataset,
-# Baseline_medication_dataset,
-# Baseline_health_utilisation_dataset,
-# Baseline_covariate_complete, file="R_datasets/Baseline_dataset.RData")
+save(First_billing_dataset,
+Baseline_Demographic_dataset,
+Baseline_Lefestyle_dataset,
+Baseline_medical_condition_dataset,
+Baseline_CCI_dataset,
+Baseline_medication_dataset,
+Baseline_health_utilisation_dataset,
+Baseline_covariate_complete, file="R_datasets/Baseline_dataset.RData")
 #==================save=============================================#
 
 # Baseline on treatment period preparation-----------------------------------------------------
@@ -589,60 +643,6 @@ specific_outcome <-
 names(specific_outcome) <- specific_outcome
 # dput(specific_outcome)
 
-#define function
-Follow_OT_func <- function(input, specific){
-  start.time <- Sys.time()
-  pre_data <- 
-    input %>% 
-    select( idp, first_bill_drug, first_bill_time) %>% 
-    left_join( Baseline_on_treat_dataset, by = "idp") %>% 
-    left_join( select( demography, idp, departure_date), by = "idp") %>% 
-    mutate( current_combined_date = pmin(discontinuation_date, switch_date, departure_date))
-  
-  current_outcome_dataset <-   
-    pre_data %>% 
-    #==================================================================#
-    # index for on-treatment period (current outcome)
-    #==================================================================#
-    left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
-    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
-    rename( disease_name = English_label, disease_group = variable_group) %>% 
-    
-    mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & current_combined_date >= dia_start_date & disease_name == specific ~ 1,
-                                              TRUE ~ 0)) %>%
-    group_by( idp) %>%
-    mutate( current_outcome_occur_subject = case_when( any(outcome_occur_record == 1) ~ 1,
-                                                       TRUE ~ 0)) %>%
-    
-    arrange( desc(outcome_occur_record), dia_start_date) %>% 
-    mutate( current_outcome_occur_date = case_when( current_outcome_occur_subject == 1 ~ dia_start_date[1],
-                                                    TRUE ~ current_combined_date)) %>% 
-    ungroup() %>%
-    #==================================================================#
-    # condense
-    #==================================================================#
-    distinct( idp, first_bill_time, current_outcome_occur_subject, current_outcome_occur_date, current_combined_date) %>%  
-    mutate( current_censored_date = pmin(current_outcome_occur_date, current_combined_date),
-            current_follow_up_days  = as.numeric( difftime( current_censored_date , first_bill_time, units = "days"))) %>% 
-    ungroup()  
-  
-  output = list( current_outcome_dataset = select( current_outcome_dataset, idp, current_outcome_occur_subject, current_follow_up_days) %>% 
-                   rename(  outcome_occur_subject = current_outcome_occur_subject, follow_up_days = current_follow_up_days))
-  output <- bind_rows( output, .id = "group_label")
-  end.time <- Sys.time()
-  print(end.time - start.time)
-  return( output)
-  
-}
-
-#running function
-OT_outcomes_list <- plyr::llply( specific_outcome, Follow_OT_func, input = First_billing_dataset) 
-
-OT_outcomes_dataframe <- bind_rows( OT_outcomes_list, .id = "outcome_label")
-
-
-# save(OT_outcomes_dataframe, file="R_datasets/OT_outcomes_dataframe.RData")
-
 #==================intention-to-treatment analysis=============================================#
 #==================intention-to-treatment analysis=============================================#
 
@@ -654,7 +654,8 @@ Follow_ITT_func <- function(input, specific){
     input %>% 
     select( idp, first_bill_drug, first_bill_time) %>% 
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
-    mutate( one_year_combined_date = pmin(departure_date, first_bill_time + 365))
+    #important, because the bill date has been adjusted forward for one month, the departure date should do the same
+    mutate( one_year_combined_date = pmin( departure_date + 31, first_bill_time + 365))
   
   one_year_outcome_dataset <-   
     pre_data %>% 
@@ -662,7 +663,7 @@ Follow_ITT_func <- function(input, specific){
     # index for on-treatment period (current outcome)
     #==================================================================#
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
-    left_join( select( catalog_clear, cod, Composite_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    left_join( select( catalog_clear, cod, English_label, Composite_label, variable_group), by = c("dia_cod" = "cod")) %>% 
     rename( disease_name = Composite_label, disease_group = variable_group) %>% 
     
     mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & one_year_combined_date >= dia_start_date & disease_name == specific ~ 1,
@@ -673,12 +674,14 @@ Follow_ITT_func <- function(input, specific){
     
     arrange( desc(outcome_occur_record), dia_start_date) %>% 
     mutate( one_year_outcome_occur_date = case_when( one_year_outcome_occur_subject == 1 ~ dia_start_date[1],
-                                                    TRUE ~ one_year_combined_date)) %>% 
+                                                    TRUE ~ one_year_combined_date),
+            one_year_outcome_name = case_when( one_year_outcome_occur_subject == 1 ~ English_label[1],
+                                                     TRUE ~ "No outcome ouccured")) %>% 
     ungroup() %>%
     #==================================================================#
     # condense
     #==================================================================#
-    distinct( idp, first_bill_time, one_year_outcome_occur_subject, one_year_outcome_occur_date, one_year_combined_date) %>%  
+    distinct( idp, first_bill_time,  one_year_outcome_name, one_year_outcome_occur_subject, one_year_outcome_occur_date, one_year_combined_date) %>%  
     mutate( one_year_censored_date = pmin(one_year_outcome_occur_date, one_year_combined_date),
             one_year_follow_up_days  = as.numeric( difftime( one_year_censored_date , first_bill_time, units = "days"))) %>% 
     ungroup()  
@@ -747,7 +750,7 @@ Follow_ITT_func <- function(input, specific){
   output = list( 
     # overall_outcome_dataset = select( overall_outcome_dataset, idp, overall_outcome_occur_subject, overall_follow_up_days) %>% 
     #  rename(  outcome_occur_subject = overall_outcome_occur_subject, follow_up_days = overall_follow_up_days),
-    one_year_outcome_dataset = select( one_year_outcome_dataset, idp, one_year_outcome_occur_subject, one_year_follow_up_days) %>%
+    one_year_outcome_dataset = select( one_year_outcome_dataset, idp, one_year_outcome_occur_subject, one_year_follow_up_days, one_year_outcome_name) %>%
       rename(  outcome_occur_subject = one_year_outcome_occur_subject, follow_up_days = one_year_follow_up_days)
     # two_year_outcome_dataset = select( two_year_outcome_dataset, idp, two_year_outcome_occur_subject, two_year_follow_up_days) %>%
     #   rename(  outcome_occur_subject = two_year_outcome_occur_subject, follow_up_days = two_year_follow_up_days),
@@ -877,12 +880,11 @@ Follow_ITT_phase_func <- function(input, specific){
 }
 
 #running function
-ITT_outcomes_list <- plyr::llply( specific_outcome, Follow_ITT_func, input = First_billing_dataset) 
-ITT_outcomes_phase_list <- plyr::llply( specific_outcome, Follow_ITT_phase_func, input = First_billing_dataset) 
+ITT_outcomes_list <- plyr::llply( specific_outcome[3], Follow_ITT_func, input = First_billing_dataset) 
+# ITT_outcomes_phase_list <- plyr::llply( specific_outcome, Follow_ITT_phase_func, input = First_billing_dataset) 
 
 ITT_outcomes_dataframe <- bind_rows( ITT_outcomes_list, .id = "outcome_label")
 ITT_outcomes_phase_dataframe <- bind_rows( ITT_outcomes_phase_list, .id = "outcome_label")
-
 
 #==================save=============================================#
 load("R_datasets/ITT_outcomes_dataframe.RData")
@@ -893,47 +895,29 @@ load("R_datasets/ITT_outcomes_dataframe.RData")
 
 # Medication Possession Ratio (MPR) ---------------------------------------------
 MPR <- 
-  baseline_cohort_codeine_add_outcome_100 %>% 
-  select( idp, first_bill_time, first_bill_drug) %>%
-  left_join( select( billing, -billing_agr), by = "idp") %>% 
-  left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
-  rename( Drug_name = English_label) %>% 
-  # filter studied drugs and observation period
-  filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
-  mutate( preb_within_one_year = case_when( (bill_date >= first_bill_time & bill_date < first_bill_time + 365) & Drug_name == first_bill_drug ~ 1,
-                                            TRUE ~ 0)) %>% 
-  group_by(idp) %>% 
-  mutate( sum_preb = sum(preb_within_one_year)) %>% 
-  ungroup() %>% 
-  distinct( idp, first_bill_drug, sum_preb)
-  
-options(scipen = 999)
-bb <- 
-  aa %>% 
-  group_by( first_bill_drug, sum_preb) %>% 
-  summarise( numb = n()) %>% 
-  group_by( first_bill_drug) %>% 
-  mutate( perc = as.numeric( numb/ sum( numb) * 100))
-  
-
-
-# Cox-model outcome stratification (OT) ------------------------------------------------
-
-cox_dataset_OT <- 
   Mathced_new_user_cohort %>% 
   select( idp, first_bill_drug) %>% 
-  left_join(OT_outcomes_dataframe, by = "idp")
+  left_join( select(First_billing_dataset, idp, first_bill_time, env), by = "idp") %>% 
+  left_join( ITT_outcomes_dataframe, by = "idp") %>% 
+  filter( outcome_label %in%  c("composite_CVD", "fracturas", "all_cause_mortality") ) %>% 
+  mutate( calendar_year = substring( first_bill_time,1,4)) %>% 
+  select( -group_label)
 
+MPR_data <-   list(env_1 = filter( MPR, (first_bill_drug == 1 & env == 1) | first_bill_drug == 0) ,
+                   env_2 = filter( MPR, (first_bill_drug == 1 & env == 2) | first_bill_drug == 0) ,
+                   env_3 = filter( MPR, (first_bill_drug == 1 & env > 2) | first_bill_drug == 0) 
+                   ) %>% 
+                    bind_rows( .id = "group_label")  
 
 res.separate_func <- function(input){
   lapply( split(input, list(input$outcome_label, input$group_label)),
           FUN = function(DF) {
             coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug ,
+                     first_bill_drug + calendar_year,
                    data =  DF)
           })}
 
-res.separate <- res.separate_func(input = cox_dataset_OT)
+res.separate <- res.separate_func(input = MPR_data)
 
 survial_hazard_func <- function(input){  
   sapply(input,function(x){ 
@@ -941,13 +925,13 @@ survial_hazard_func <- function(input){
     # p.value<-signif(dt$wald["pvalue"], digits=2)
     # wald.test<-signif(x$wald["test"], digits=3)
     # beta<-signif(x$coef[1], digits=3);#coeficient beta
-    sd <- signif(dt$coef[3], digits=3);
-    HR <-dt$coef[2];#exp(beta)
-    HR.confint.lower <-dt$conf.int[,"lower .95"]
-    HR.confint.upper <- dt$conf.int[,"upper .95"]
+    P_value <- dt$coefficients["first_bill_drug", "Pr(>|z|)"];
+    HR <-dt$conf.int["first_bill_drug","exp(coef)"]
+    HR.confint.lower <-dt$conf.int["first_bill_drug","lower .95"]
+    HR.confint.upper <- dt$conf.int["first_bill_drug","upper .95"]
     # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
-    res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
-    names(res)<-c( "estimate", "stderr", "lower", "upper")
+    res<-c( HR , P_value, HR.confint.lower, HR.confint.upper)
+    names(res)<-c( "estimate", "P_value","lower", "upper")
     return(res)
     #return(exp(cbind(coef(x),confint(x)))) 
   }) %>% 
@@ -956,10 +940,12 @@ survial_hazard_func <- function(input){
     tibble::rownames_to_column() %>% 
     rename( variable = rowname) %>% 
     mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
-                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))}
+                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), " to ",
+                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")", sep = ""),
+            P_value_format = case_when( P_value <0.001 ~ "<0.001",
+                                        TRUE ~ paste( substring( P_value, 2, str_locate( as.character(P_value), "[.]")[,1] + 3))))}
 
-OT_survial_hazard <- survial_hazard_func(input = res.separate)
+MPR_survial_hazard <- survial_hazard_func(input = res.separate)
 
 # #==================================================================#
 # # Calculate addtional statistics ( mean follow up, rate)
@@ -971,31 +957,35 @@ summary_table_func <- function( inputdata){
     summarise(n = n(), 
               # mean_age = mean( initiation_age), 
               events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days))) %>% 
+              mean_follow = as.numeric( mean(follow_up_days)/365), 
+              total_follow = as.numeric( sum(follow_up_days)/365)) %>% 
     group_by(outcome_label, group_label) %>% 
-    mutate( rate = events / (n * mean_follow /365) * 1000 ) %>% 
+    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
     mutate( ratio = rate[2] / rate[1]) %>% 
-    mutate( diff = rate[2] - rate[1]) %>% 
+    mutate( dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$estimate * 1000) %>% 
+    mutate( low_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[1] * 1000) %>% 
+    mutate( high_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[2] * 1000) %>% 
     
     mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
     mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
-            diff = substring(diff, 1,str_locate(as.character(diff), "[.]")[,1] + 2))
+            dif_CI = paste(substring(dif, 1,str_locate(as.character(dif), "[.]")[,1] + 2), " (",
+                           substring(low_dif, 1,str_locate(as.character(low_dif), "[.]")[,1] + 2), " to ",
+                           substring(high_dif, 1,str_locate(as.character(high_dif), "[.]")[,1] + 2), ")", sep = ""))
   
   return(summary_table)
 }
-OT_survial_event <- summary_table_func( inputdata = cox_dataset_OT)
+MPR_survial_event <- summary_table_func( inputdata = MPR_data)
 
 # #==================================================================#
 # # combine all statistics 
 # #==================================================================#
-
-OT_survial_summary <- 
-  filter( OT_survial_event, first_bill_drug ==0) %>% 
-  left_join( filter( OT_survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
+MPR_survial_summary <- 
+  MPR_survial_event %>% 
   mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
-  left_join( OT_survial_hazard, by = "variable") %>% 
-  ungroup()
-
+  left_join( MPR_survial_hazard, by = "variable") %>% 
+  ungroup() %>% 
+  mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality", "falls", "constipation", "sleep_disorders", "delirium"))) %>% 
+  arrange( outcome_label)
 
 
 # Cox-model outcome stratification (ITT) ------------------------------------------------
@@ -1080,6 +1070,105 @@ ITT_survial_event <- summary_table_func( inputdata = cox_dataset_ITT)
 ITT_survial_summary <- 
   filter( ITT_survial_event, first_bill_drug ==0) %>% 
   left_join( filter( ITT_survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
+  mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
+  left_join( ITT_survial_hazard, by = "variable") %>% 
+  ungroup() %>% 
+  mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality", "falls", "constipation", "sleep_disorders", "delirium"))) %>% 
+  arrange( outcome_label)
+
+
+# Cox-model outcome stratification CVD and fractures (ITT) ------------------------------------------------
+cox_dataset_CVD_fracture <- 
+  Mathced_new_user_cohort %>% 
+  select( idp, first_bill_drug) %>% 
+  left_join( ITT_outcomes_dataframe, by = "idp") %>% 
+  left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  
+  filter( outcome_label %in%  c("composite_CVD", "fracturas") ) %>% 
+  mutate( calendar_year = substring( first_bill_time,1,4)) %>% 
+  select( -group_label)
+
+
+CVD_fracture <-   list(stroke = filter(cox_dataset_CVD_fracture, one_year_outcome_name %in% c("stroke", "No outcome ouccured")),
+                       MI = filter(cox_dataset_CVD_fracture, one_year_outcome_name %in% c("myocardial_infarction", "No outcome ouccured")),
+                       heart_failure = filter(cox_dataset_CVD_fracture, one_year_outcome_name %in% c("cardiac_insufficiency_heart_failure", "No outcome ouccured"))
+                                   ) %>% 
+  bind_rows( .id = "group_label")  
+
+
+
+res.separate_func <- function(input){
+  lapply( split(input, list(input$outcome_label, input$group_label)),
+          FUN = function(DF) {
+            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
+                     first_bill_drug + calendar_year,
+                   data =  DF)
+          })}
+
+res.separate <- res.separate_func(input = CVD_fracture)
+
+survial_hazard_func <- function(input){  
+  sapply(input,function(x){ 
+    dt <- summary(x)
+    # p.value<-signif(dt$wald["pvalue"], digits=2)
+    # wald.test<-signif(x$wald["test"], digits=3)
+    # beta<-signif(x$coef[1], digits=3);#coeficient beta
+    P_value <- dt$coefficients["first_bill_drug", "Pr(>|z|)"];
+    HR <-dt$conf.int["first_bill_drug","exp(coef)"]
+    HR.confint.lower <-dt$conf.int["first_bill_drug","lower .95"]
+    HR.confint.upper <- dt$conf.int["first_bill_drug","upper .95"]
+    # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
+    res<-c( HR , P_value, HR.confint.lower, HR.confint.upper)
+    names(res)<-c( "estimate", "P_value","lower", "upper")
+    return(res)
+    #return(exp(cbind(coef(x),confint(x)))) 
+  }) %>% 
+    t() %>% 
+    as_tibble(rownames = NA) %>% 
+    tibble::rownames_to_column() %>% 
+    rename( variable = rowname) %>% 
+    mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
+                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), " to ",
+                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")", sep = ""),
+            P_value_format = case_when( P_value <0.001 ~ "<0.001",
+                                        TRUE ~ paste( substring( P_value, 2, str_locate( as.character(P_value), "[.]")[,1] + 3))))}
+
+CVD_fracture_survial_hazard <- survial_hazard_func(input = res.separate)
+
+# #==================================================================#
+# # Calculate addtional statistics ( mean follow up, rate)
+# #==================================================================#
+summary_table_func <- function( inputdata){
+  summary_table <- 
+    inputdata %>% 
+    group_by( outcome_label, group_label, first_bill_drug) %>% 
+    summarise(n = n(), 
+              # mean_age = mean( initiation_age), 
+              events = sum( outcome_occur_subject), 
+              mean_follow = as.numeric( mean(follow_up_days)/365), 
+              total_follow = as.numeric( sum(follow_up_days)/365)) %>% 
+    group_by(outcome_label, group_label) %>% 
+    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
+    mutate( ratio = rate[2] / rate[1]) %>% 
+    mutate( dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$estimate * 1000) %>% 
+    mutate( low_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[1] * 1000) %>% 
+    mutate( high_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[2] * 1000) %>% 
+    
+    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
+    mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
+            dif_CI = paste(substring(dif, 1,str_locate(as.character(dif), "[.]")[,1] + 2), " (",
+                           substring(low_dif, 1,str_locate(as.character(low_dif), "[.]")[,1] + 2), " to ",
+                           substring(high_dif, 1,str_locate(as.character(high_dif), "[.]")[,1] + 2), ")", sep = ""))
+  
+  return(summary_table)
+}
+CVD_fracture_survial_event <- summary_table_func( inputdata = CVD_fracture)
+
+# #==================================================================#
+# # combine all statistics 
+# #==================================================================#
+CVD_fracture_survial_summary <- 
+  filter( CVD_fracture_survial_event, first_bill_drug ==0) %>% 
+  left_join( filter( CVD_fracture_survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
   mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
   left_join( ITT_survial_hazard, by = "variable") %>% 
   ungroup() %>% 
@@ -1184,6 +1273,7 @@ cox_interraction_ITT <-
   Mathced_new_user_cohort %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>% 
+  left_join( select(Baseline_covariate_complete, idp, any_MSK, any_pain, any_NSAIDs, any_Psychotropic), by = "idp") %>% 
   filter( outcome_label %in% c("composite_CVD", "fracturas", "all_cause_mortality"), group_label == "one_year_outcome_dataset") %>% 
   mutate( calendar_year = substring( first_bill_time,1,4)) %>% 
   mutate( separate_label = outcome_label) %>% 
@@ -1193,31 +1283,33 @@ cox_interraction_ITT <-
                                  initiation_age >=60  ~ ">=60"))
 
 
+
+
 cox_dataset_interaction <-   list( overall = cox_interraction_ITT,
                                    sex = cox_interraction_ITT,
                                    initiation_age = cox_interraction_ITT,
                                    cancer = cox_interraction_ITT,
-                                   oa = cox_interraction_ITT, 
-                                   back_pain = cox_interraction_ITT,
-                                   neck_pain = cox_interraction_ITT,
+                                   any_MSK = cox_interraction_ITT,
+                                   cough = cox_interraction_ITT, 
+                                   any_pain = cox_interraction_ITT,
                                    cci_group = cox_interraction_ITT,
-                                   Ibuprofeno = cox_interraction_ITT
-                                   
+                                   any_Psychotropic = cox_interraction_ITT,
+                                   any_NSAIDs = cox_interraction_ITT
                                    ) %>% 
   bind_rows( .id = "outcome_label") %>% 
   mutate( group_label = case_when( outcome_label == "overall" ~ "overall", 
                                    outcome_label == "sex" ~ as.character(sex), 
                                    outcome_label == "initiation_age" ~ age_group,
                                    outcome_label == "cancer" ~ as.character(cancer),
-                                   outcome_label == "oa" ~ as.character(oa),
-                                   outcome_label == "back_pain" ~ as.character(back_pain),
-                                   outcome_label == "neck_pain" ~ as.character(neck_pain),
+                                   outcome_label == "any_MSK" ~ as.character(any_MSK),
+                                   outcome_label == "any_pain" ~ as.character(any_pain),
+                                   outcome_label == "cough" ~ as.character(cough),
                                    outcome_label == "cci_group" ~ paste(as.character(cci_group), "dis", sep = ""),
-                                   outcome_label == "Ibuprofeno" ~ as.character(Ibuprofeno)
+                                   outcome_label == "any_Psychotropic" ~ as.character(any_Psychotropic),
+                                   outcome_label == "any_NSAIDs" ~ as.character(any_NSAIDs)
                                    )) %>% 
   mutate( variable = paste(outcome_label, group_label, sep = "."))
 
-table(cox_dataset_interaction$variable)
 
 res.separate_func <- function(input){
   lapply( split(input, list(input$separate_label, input$variable)),
@@ -2046,81 +2138,28 @@ ggplot( data = aa, aes( x = group_label, y = dif))+
 #==================================================================#
 Table2 <- 
   ITT_survial_summary %>% 
-  select( outcome_label,  events.y,  rate.y, events.x,rate.x,CI, dif_CI.y,  P_value_format) %>% 
+  select( outcome_label,  events.y,  rate.y, events.x,rate.x, dif_CI.y, CI,   P_value_format) %>% 
   mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality",
                                                               "falls", "constipation",  "sleep_disorders", "delirium"))) %>% 
   arrange( outcome_label)
 
 
 Table2 <- 
-  ITT_survial_phrase_summary %>% 
-  select( outcome_label, group_label, n.y,  events.y, rate.y, n.x, events.x, rate.x, CI) %>% 
-  mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality")),
-          group_label = factor( group_label, levels = c("one_year_outcome_dataset", "two_year_outcome_dataset",  "three_year_outcome_dataset"))) %>% 
+  CVD_fracture_survial_summary %>% 
+  select( group_label,  events.y,  rate.y, events.x,rate.x, dif_CI.y, CI, P_value_format) %>% 
+  mutate( group_label = factor( group_label, levels = c("stroke" , "MI",  "heart_failure"))) %>% 
+  arrange( group_label)
+
+
+
+Table2 <- 
+  MPR_survial_summary %>% 
+  select( outcome_label, group_label, n.y, events.y,  rate.y, n.x, events.x,rate.x, dif_CI.y, CI, P_value_format) %>% 
+  mutate( group_label = factor( group_label, levels = c("env_1" , "env_2",  "env_3"))) %>% 
   arrange( outcome_label, group_label)
 
 
 
-
-
-# Conditional ITT test ----------------------------------------------------
-
-cox_dataset_ITT <- 
-  Mathced_new_user_cohort %>% 
-  select( idp, first_bill_drug) %>% 
-  left_join( ITT_outcomes_dataframe, by = "idp") %>% 
-  left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  
-  filter( outcome_label != "opioid_abuse") %>% 
-  mutate( calendar_year = substring( first_bill_time,1,4)) 
-
-
-
-res.separate_func <- function(input){
-  lapply( split(input, list(input$outcome_label, input$group_label)),
-          FUN = function(DF) {
-            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug + calendar_year,
-                   data =  DF)
-          })}
-
-res.separate <- res.separate_func(input = cox_dataset_ITT)
-
-dt <- res.separate$fracturas.one_year_outcome_dataset
-
-prob_times <- seq(90, 180, 365)
-
-
-
-
-
-
-survial_hazard_func <- function(input){  
-  sapply(input,function(x){ 
-    dt <- summary(x)
-    # p.value<-signif(dt$wald["pvalue"], digits=2)
-    # wald.test<-signif(x$wald["test"], digits=3)
-    # beta<-signif(x$coef[1], digits=3);#coeficient beta
-    P_value <- dt$coefficients["first_bill_drug", "Pr(>|z|)"];
-    HR <-dt$conf.int["first_bill_drug","exp(coef)"]
-    HR.confint.lower <-dt$conf.int["first_bill_drug","lower .95"]
-    HR.confint.upper <- dt$conf.int["first_bill_drug","upper .95"]
-    # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
-    res<-c( HR , P_value, HR.confint.lower, HR.confint.upper)
-    names(res)<-c( "estimate", "P_value","lower", "upper")
-    return(res)
-    #return(exp(cbind(coef(x),confint(x)))) 
-  }) %>% 
-    t() %>% 
-    as_tibble(rownames = NA) %>% 
-    tibble::rownames_to_column() %>% 
-    rename( variable = rowname) %>% 
-    mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
-                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), " to ",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")", sep = ""),
-            P_value_format = case_when( P_value <0.001 ~ "<0.001",
-                                        TRUE ~ paste( substring( P_value, 2, str_locate( as.character(P_value), "[.]")[,1] + 3))))}
-
-ITT_survial_phrase_hazard <- survial_hazard_func(input = res.separate)
 
 
 
@@ -2227,315 +2266,7 @@ mathched_cohort_codine_100 <-
 
 
 
-# Cox-model outcome stratification (ITT) ------------------------------------------------
 
-cox_dataset_ITT <- 
-  mathched_cohort_codine_100 %>% 
-  left_join(Intention_combined_add_outcome_codeine_dataframe, by = "idp") 
-
-
-res.separate_func <- function(input){
-  lapply( split(input, list(input$outcome_label, input$group_label)),
-          FUN = function(DF) {
-            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug ,
-                   data =  DF)
-          })}
-
-res.separate <- res.separate_func(input = cox_dataset_ITT)
-
-
-survial_hazard_func <- function(input){  
-  sapply(input,function(x){ 
-    dt <- summary(x)
-    # p.value<-signif(dt$wald["pvalue"], digits=2)
-    # wald.test<-signif(x$wald["test"], digits=3)
-    # beta<-signif(x$coef[1], digits=3);#coeficient beta
-    sd <- signif(dt$coef[3], digits=3);
-    HR <-dt$coef[2];#exp(beta)
-    HR.confint.lower <-dt$conf.int[,"lower .95"]
-    HR.confint.upper <- dt$conf.int[,"upper .95"]
-    # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
-    res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
-    names(res)<-c( "estimate", "stderr", "lower", "upper")
-    return(res)
-    #return(exp(cbind(coef(x),confint(x)))) 
-  }) %>% 
-    t() %>% 
-    as_tibble(rownames = NA) %>% 
-    tibble::rownames_to_column() %>% 
-    rename( variable = rowname) %>% 
-    mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
-                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))}
-
-ITT_survial_hazard <- survial_hazard_func(input = res.separate)
-
-# #==================================================================#
-# # Calculate addtional statistics ( mean follow up, rate)
-# #==================================================================#
-summary_table_func <- function( inputdata){
-  summary_table <- 
-    inputdata %>% 
-    group_by( outcome_label, group_label, first_bill_drug) %>% 
-    summarise(n = n(), 
-              mean_age = mean( initiation_age), 
-              events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
-    group_by(outcome_label, group_label) %>% 
-    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
-    mutate( ratio = rate[2] / rate[1]) %>% 
-    
-    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
-    mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2))
-  
-  
-  return(summary_table)
-}
-ITT_survial_event <- summary_table_func( inputdata = cox_dataset_ITT)
-
-# #==================================================================#
-# # combine all statistics 
-# #==================================================================#
-
-ITT_survial_summary <- 
-  filter( ITT_survial_event, first_bill_drug ==0) %>% 
-  left_join( filter( ITT_survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
-  mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
-  left_join( ITT_survial_hazard, by = "variable")
-
-
-# Cox-model outcome stratification (ITT, dose-dependent response) ------------------------------------------------
-cox_dataset_dose_dependent <- 
-  mathched_cohort_codine_100 %>% 
-  left_join(Intention_combined_add_outcome_codeine_dataframe, by = "idp") %>% 
-  filter( outcome_label %in% c( "myocardial_infarction", "stroke", "fracturas", "all_cause_mortality"), group_label == "one_year_outcome_dataset") %>% 
-  left_join( select(MPR, idp, sum_preb), by = "idp") %>% 
-  mutate( dose_group = case_when( sum_preb == 1 ~ "1",
-                                  sum_preb == 2 ~ "2",
-                                  TRUE ~ "3"))
-tramadol_doese <- 
-  cox_dataset_dose_dependent %>% 
-  filter( first_bill_drug == 1)
-
-codeine_reference <- 
-  cox_dataset_dose_dependent %>% 
-  filter( first_bill_drug == 0) %>% 
-  select( -dose_group)
-
-
-aa <- 
-  bind_rows( list(codeine_reference, codeine_reference, codeine_reference), .id = "dose_group")
-
-bb <- 
-  bind_rows( tramadol_doese, aa)
-
-table(bb$dose_group)
-
-res.separate_func <- function(input){
-  lapply( split(input, list(input$outcome_label, input$dose_group)),
-          FUN = function(DF) {
-            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug ,
-                   data =  DF)
-          })}
-
-res.separate <- res.separate_func(input = bb)
-
-
-survial_hazard_func <- function(input){  
-  sapply(input,function(x){ 
-    dt <- summary(x)
-    # p.value<-signif(dt$wald["pvalue"], digits=2)
-    # wald.test<-signif(x$wald["test"], digits=3)
-    # beta<-signif(x$coef[1], digits=3);#coeficient beta
-    sd <- signif(dt$coef[3], digits=3);
-    HR <-dt$coef[2];#exp(beta)
-    HR.confint.lower <-dt$conf.int[,"lower .95"]
-    HR.confint.upper <- dt$conf.int[,"upper .95"]
-    # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
-    res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
-    names(res)<-c( "estimate", "stderr", "lower", "upper")
-    return(res)
-    #return(exp(cbind(coef(x),confint(x)))) 
-  }) %>% 
-    t() %>% 
-    as_tibble(rownames = NA) %>% 
-    tibble::rownames_to_column() %>% 
-    rename( variable = rowname) %>% 
-    mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
-                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))}
-
-ITT_survial_hazard_Dose <- survial_hazard_func(input = res.separate)
-
-# #==================================================================#
-# # Calculate addtional statistics ( mean follow up, rate)
-# #==================================================================#
-summary_table_func <- function( inputdata){
-  summary_table <- 
-    inputdata %>% 
-    group_by( outcome_label, dose_group, first_bill_drug) %>% 
-    summarise(n = n(), 
-              mean_age = mean( initiation_age), 
-              events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
-    group_by(outcome_label, dose_group) %>% 
-    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
-    mutate( ratio = rate[2] / rate[1]) %>% 
-    
-    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
-    mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2))
-  
-  
-  return(summary_table)
-}
-ITT_survial_event_Dose <- summary_table_func( inputdata = bb)
-
-# #==================================================================#
-# # combine all statistics 
-# #==================================================================#
-
-ITT_survial_summary_Dose <- 
-  filter( ITT_survial_event_Dose, first_bill_drug ==0) %>% 
-  left_join( filter( ITT_survial_event_Dose, first_bill_drug ==1), by = c("outcome_label", "dose_group")) %>% 
-  mutate( variable = paste( outcome_label,dose_group, sep = ".")) %>% 
-  left_join( ITT_survial_hazard_Dose, by = "variable")
-
-
-# Cox-model interaction stratification ------------------------------------------------
-cox_dataset_whole_current <- 
-  mathched_cohort_codine_100 %>% 
-  left_join(Intention_combined_add_outcome_codeine_dataframe, by = "idp") %>% 
-  filter( outcome_label %in% c( "myocardial_infarction", "stroke", "fracturas", "all_cause_mortality"), group_label == "one_year_outcome_dataset") %>% 
-  mutate( separate_label = outcome_label) %>% 
-  select( -outcome_label, -group_label) %>% 
-  mutate( age_group = case_when( initiation_age >=18 & initiation_age < 45 ~ "18-44",
-                                 initiation_age >=45 & initiation_age < 65 ~ "45-65",
-                                 initiation_age >=65 & initiation_age < 80 ~ "65-80",
-                                 initiation_age >=70 ~ ">=80"))
-
-
-cox_dataset_interaction <-   list( overall = cox_dataset_whole_current,
-                                   sex = cox_dataset_whole_current,
-                                   initiation_age = cox_dataset_whole_current,
-                                   back_pain = filter(cox_dataset_whole_current, back_pain ==1),
-                                   neck_pain = filter(cox_dataset_whole_current, neck_pain ==1),
-                                   oa = filter(cox_dataset_whole_current, oa ==1),
-                                   other_musculskeletal_disorders = filter(cox_dataset_whole_current, other_musculskeletal_disorders ==1),
-                                   neurologic_pathologies = filter(cox_dataset_whole_current, neurologic_pathologies ==1)) %>% bind_rows( .id = "outcome_label") %>% 
-                              mutate( group_label = case_when( outcome_label == "overall" ~ "overall", 
-                                                               outcome_label == "sex" ~ as.character(sex), 
-                                                               outcome_label == "initiation_age" ~ age_group,
-                                                               outcome_label == "back_pain" ~ "back_pain",
-                                                               outcome_label == "neck_pain" ~ "neck_pain",
-                                                               outcome_label == "oa" ~ "oa",
-                                                               outcome_label == "other_musculskeletal_disorders" ~ "other_musculskeletal_disorders",
-                                                               outcome_label == "neurologic_pathologies" ~ "neurologic_pathologies")) %>% 
-                              mutate( outcome_label = case_when( outcome_label %in% c( "back_pain", "neck_pain", "oa", "other_musculskeletal_disorders", "neurologic_pathologies") ~ "pain_indication",
-                                                                 TRUE ~ outcome_label)) %>% 
-                              mutate( variable = paste(outcome_label, group_label, sep = "."))
-
-table(cox_dataset_interaction$variable)
-
-
-res.separate_func <- function(input){
-  lapply( split(input, list(input$separate_label, input$variable)),
-          FUN = function(DF) {
-            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug ,
-                   data =  DF)
-          })}
-
-res.separate <- res.separate_func(input = cox_dataset_interaction)
-
-
-survial_hazard_func <- function(input){  
-  sapply(input,function(x){ 
-    dt <- summary(x)
-    # p.value<-signif(dt$wald["pvalue"], digits=2)
-    # wald.test<-signif(x$wald["test"], digits=3)
-    # beta<-signif(x$coef[1], digits=3);#coeficient beta
-    sd <- signif(dt$coef[3], digits=3);
-    HR <-dt$coef[2];#exp(beta)
-    HR.confint.lower <-dt$conf.int[,"lower .95"]
-    HR.confint.upper <- dt$conf.int[,"upper .95"]
-    # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
-    res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
-    names(res)<-c( "estimate", "stderr", "lower", "upper")
-    return(res)
-    #return(exp(cbind(coef(x),confint(x)))) 
-  }) %>% 
-    t() %>% 
-    as_tibble(rownames = NA) %>% 
-    tibble::rownames_to_column() %>% 
-    rename( variable = rowname) %>% 
-    mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
-                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))}
-
-survial_hazard <- survial_hazard_func(input = res.separate)
-
-# #==================================================================#
-# # Calculate addtional statistics ( mean follow up, rate)
-# #==================================================================#
-summary_table_func <- function( inputdata){
-  summary_table <- 
-    inputdata %>% 
-    group_by( separate_label, outcome_label,group_label, first_bill_drug) %>% 
-    summarise(n = n(), 
-              mean_age = mean( initiation_age), 
-              events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days)/365)) %>% 
-    group_by(outcome_label, group_label) %>% 
-    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
-    mutate( ratio = rate[2] / rate[1]) %>% 
-    mutate( dif = rate[2] - rate[1]) %>% 
-    
-    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
-    mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2))
-  
-  
-  return(summary_table)
-}
-survial_event <- summary_table_func( inputdata = cox_dataset_interaction)
-
-
-
-# #==================================================================#
-# # combine all statistics 
-# #==================================================================#
-survial_summary <- 
-  filter( survial_event, first_bill_drug ==0) %>% 
-  left_join( filter( survial_event, first_bill_drug ==1), by = c("separate_label", "outcome_label", "group_label")) %>% 
-  mutate( variable = paste( separate_label, outcome_label, group_label, sep = ".")) %>% 
-  left_join( survial_hazard, by = "variable")
-
-
-
-# Univariate survival analyses outcome stratification ---------------------
-KM_dataset_intention <- 
-  mathched_cohort_codine_100 %>% 
-  left_join(Intention_combined_add_outcome_codeine_dataframe, by = "idp") %>% 
-  filter( !is.na(outcome_label))
-
-aa <- 
-  KM_dataset_intention %>% 
-  filter( outcome_label == "stroke") 
-
-
-res.separate_func <- function(input){
-  lapply( split(input, list(input$outcome_label, input$group_label)),
-          FUN = function(DF) {
-            coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug ,
-                   data =  DF)
-          })}
-
-
-fit <- analyse_survival(vars(follow_up_days, outcome_occur_subject),
-                   by = first_bill_drug,
-                   data = aa)
 
 
 # Forest plot -------------------------------------------------------------
@@ -2649,6 +2380,15 @@ ggsave(filename = "sd_plot.png",
 
 
 # Save plots --------------------------------------------------------------
+ggsave(filename = "trend_plot.png",
+       path = "Figures",
+       plot = trend_plot,
+       width = 12,
+       height = 8,
+       units = "cm",
+       type = "cairo")
+
+
 
 ggsave(filename = "main_plot_Fracture.png",
        path = "Figures",

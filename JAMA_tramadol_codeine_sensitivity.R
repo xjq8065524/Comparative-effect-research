@@ -50,7 +50,7 @@ setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety
 # attention: which biliing dataset is used
 load("D:/DPhil/Project_Opioid_use/Data/billing_delay.RData")
 # attention: which diagnosis dataset is used
-load("D:/DPhil/Project_Opioid_use/Data/prescription.RData")
+# load("D:/DPhil/Project_Opioid_use/Data/prescription.RData")
 load("D:/DPhil/Project_Opioid_use/Data/diagnosis_complete.RData")
 load("D:/DPhil/Project_Opioid_use/Data/demography.RData")
 load("D:/DPhil/Project_Opioid_use/Data/social_variables.RData")
@@ -277,7 +277,7 @@ Baseline_covariate_complete <-
 
 # Baseline on treatment period preparation-----------------------------------------------------
 # set.seed(1)
-# baseline_test<- sample_frac(baseline_cohort_codeine_add_outcome_100, 0.01)
+# baseline_test<- sample_frac(First_billing_dataset, 0.01)
 
 
 on_treatment_period <- function(input_dataset ){
@@ -289,13 +289,13 @@ on_treatment_period <- function(input_dataset ){
   switching_dataset <- 
     input_dataset %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
-    left_join( select( billing, -billing_agr), by = "idp") %>% 
+    left_join( select( billing_delay, -billing_agr), by = "idp") %>% 
     left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
     rename( Drug_name = English_label) %>% 
     # filter studied drugs and observation period
     filter(  Drug_name %in% c("tramadol", "codeine"), bill_date >= as.Date("2007-01-01")) %>% 
     # calculate prescription duration
-    mutate( pre_days = env * 30) %>% 
+    mutate( pre_days = env * 15) %>% 
     # first arrange then group by to save computation time
     arrange( bill_date) %>% 
     group_by( idp) %>% 
@@ -314,21 +314,22 @@ on_treatment_period <- function(input_dataset ){
     filter( bill_seq == 1) %>% 
     select( idp, switch_date)
   
+  print( "switching_dataset")
   #==================================================================#
   #  discontinuation, analyses based on one drug only
   #==================================================================#
   #tramadol
   tramadol_discontinuation_dataset <- 
-    First_billing_dataset %>% 
+    input_dataset %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     filter( first_bill_drug == "tramadol") %>% 
-    left_join( select( billing, -billing_agr), by = "idp") %>% 
+    left_join( select( billing_delay, -billing_agr), by = "idp") %>% 
     left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
     rename( Drug_name = English_label) %>% 
     # filter studied drugs and observation period
     filter(  Drug_name %in% c("tramadol"), bill_date >= as.Date("2007-01-01")) %>%  
     # calculate prescription duration
-    mutate( pre_days = env * 30) %>% 
+    mutate( pre_days = env * 15) %>% 
     # first arrange then group by to save computation time
     arrange( bill_date) %>% 
     group_by( idp) %>% 
@@ -348,21 +349,21 @@ on_treatment_period <- function(input_dataset ){
                                               TRUE ~ bill_date[n()] + pre_days[n()] + 15) ) %>% 
     ungroup() %>% 
     filter( bill_seq == 1) %>% 
-    select( idp, discontinuation_date)
+    select( idp, discontinuation_date,  total_seq, discontinuation_index)
   
-  
+  print( "tramadol_discontinuation_dataset")
   #codeine
   codeine_discontinuation_dataset <- 
-    First_billing_dataset %>% 
+    input_dataset %>% 
     select( idp, first_bill_time, first_bill_drug) %>%
     filter( first_bill_drug == "codeine") %>% 
-    left_join( select( billing, -billing_agr), by = "idp") %>% 
+    left_join( select( billing_delay, -billing_agr), by = "idp") %>% 
     left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
     rename( Drug_name = English_label) %>% 
     # filter studied drugs and observation period
     filter(  Drug_name %in% c("codeine"), bill_date >= as.Date("2007-01-01")) %>%  
     # calculate prescription duration
-    mutate( pre_days = env * 30) %>% 
+    mutate( pre_days = env * 15) %>% 
     # first arrange then group by to save computation time
     arrange( bill_date) %>% 
     group_by( idp) %>% 
@@ -382,8 +383,8 @@ on_treatment_period <- function(input_dataset ){
                                               TRUE ~ bill_date[n()] + pre_days[n()] + 15) ) %>% 
     ungroup() %>% 
     filter( bill_seq == 1) %>% 
-    select( idp, discontinuation_date)
-  
+    select( idp, discontinuation_date,  total_seq, discontinuation_index)
+  print( "codeine_discontinuation_dataset")
   #combine
   
   combine_on_treat_dataset <- 
@@ -399,7 +400,7 @@ Baseline_on_treat_dataset <- on_treatment_period( input_dataset = First_billing_
 sapply(Baseline_on_treat_dataset, function(x)sum(is.na(x)))
 
 #==================save=============================================#
-#save(Baseline_on_treat_dataset, file="R_datasets/Baseline_on_treat_dataset.RData")
+save(Baseline_on_treat_dataset, file="R_datasets/Baseline_on_treat_dataset.RData")
 #==================save=============================================#
 
 # source population (two_year waskout period) -----------------------------------------------------
@@ -524,23 +525,56 @@ sapply( Base_new_user_cohort_single, function(x)sum(is.na(x)))
 
 save(Base_new_user_cohort_single, file="R_datasets/Base_new_user_cohort_single.RData")
 
+# Link to baseline variables (single prescription) ----------------------------------------
+Base_new_user_cohort_one_bill <- 
+  Base_new_user_cohort %>% 
+  select( idp) %>% 
+  left_join( select( Baseline_on_treat_dataset, idp, total_seq, discontinuation_index), by = "idp") %>% 
+  left_join( select( First_billing_dataset, idp, billing_cod, first_bill_drug), by = "idp" ) %>% 
+  left_join( Baseline_covariate_complete, by = "idp") %>% 
+  mutate( first_bill_drug = case_when( first_bill_drug == "codeine" ~ 0,
+                                       TRUE ~ 1)) %>% 
+  filter( total_seq == 1 | discontinuation_index ==1) %>% 
+  select( -total_seq, -discontinuation_index )
+
+sapply( Base_new_user_cohort_one_bill, function(x)sum(is.na(x)))
+
+# save(Base_new_user_cohort_one_bill, file="R_datasets/Base_new_user_cohort_one_bill.RData")
+
+# Link to baseline variables (continuous prescription) ----------------------------------------
+Base_new_user_cohort_continuous_bill <- 
+  Base_new_user_cohort %>% 
+  select( idp) %>% 
+  left_join( select( Baseline_on_treat_dataset, idp, total_seq, discontinuation_index), by = "idp") %>% 
+  left_join( select( First_billing_dataset, idp, billing_cod, first_bill_drug), by = "idp" ) %>% 
+  left_join( Baseline_covariate_complete, by = "idp") %>% 
+  mutate( first_bill_drug = case_when( first_bill_drug == "codeine" ~ 0,
+                                       TRUE ~ 1)) %>% 
+  filter( total_seq > 1 & discontinuation_index > 1) %>% 
+  select( -total_seq, -discontinuation_index )
+
+sapply( Base_new_user_cohort_continuous_bill, function(x)sum(is.na(x)))
+
+# save(Base_new_user_cohort_continuous_bill, file="R_datasets/Base_new_user_cohort_continuous_bill.RData")
+# 
+
 # Missing data imputation -------------------------------------------------
 imputation_data <- 
-  Base_new_user_cohort_single %>% 
-  select( -idp , -first_bill_drug, -billing_cod) 
+  Base_new_user_cohort_continuous_bill %>% 
+  select( -idp , -first_bill_drug, -billing_cod, -any_MSK, -any_NSAIDs, -any_Psychotropic) 
 names(imputation_data)
 
 mice_model <- mice( data = imputation_data, m = 1, maxit = 2, seed = 500)
-Base_new_user_cohort_imputed_single <- complete(mice_model,1) %>% mutate( idp = Base_new_user_cohort_single$idp, first_bill_drug = Base_new_user_cohort_single$first_bill_drug)
+Base_new_user_cohort_imputed_continuous_bill <- complete(mice_model,1) %>% mutate( idp = Base_new_user_cohort_continuous_bill$idp, first_bill_drug = Base_new_user_cohort_continuous_bill$first_bill_drug)
 
 
 #==================save=============================================#
-save(Base_new_user_cohort_imputed_single, file="R_datasets/Base_new_user_cohort_imputed_single.RData")
+# save(Base_new_user_cohort_imputed_continuous_bill, file="R_datasets/Base_new_user_cohort_imputed_continuous_bill.RData")
 #==================save=============================================#
 
 # Propensity score modelling and matching ----------------------------------------------
 ## Get variables names
-dput( names( Base_new_user_cohort_imputed_single))
+dput( names( Base_new_user_cohort_imputed_continuous_bill))
 
 impute_covariate <- 
   c( "sex", "economic_level", "rural", "initiation_age", 
@@ -562,10 +596,10 @@ impute_covariate <-
 ## Fit model
 psModel <- glm(reformulate(termlabels = impute_covariate, response = "first_bill_drug"),
                family  = binomial(link = "logit"),
-               data    = Base_new_user_cohort_imputed_single)
+               data    = Base_new_user_cohort_imputed_continuous_bill)
 
 Base_new_user_cohort_probability <- 
-  Base_new_user_cohort_imputed_single %>% 
+  Base_new_user_cohort_imputed_continuous_bill %>% 
   mutate( P_tramadol = psModel$fitted.values,
           P_codeine = 1 - psModel$fitted.values)
 
@@ -581,11 +615,11 @@ listMatch <- Matching::Match(Tr       = Base_new_user_cohort_probability$first_b
                              version  = "fast")
 
 
-Mathced_new_user_cohort_single <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
+Mathced_new_user_cohort_continuous_bill <- Base_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
 
 #==================save=============================================#
 # load("R_datasets/Mathced_new_user_cohort.RData")
-save(Mathced_new_user_cohort_single, file="R_datasets/Mathced_new_user_cohort_single.RData")
+# save(Mathced_new_user_cohort_continuous_bill, file="R_datasets/Mathced_new_user_cohort_continuous_bill.RData")
 #==================save=============================================#
 
 
@@ -683,7 +717,7 @@ Follow_OT_func <- function(input, specific){
     select( idp, first_bill_drug, first_bill_time) %>% 
     left_join( Baseline_on_treat_dataset, by = "idp") %>% 
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
-    mutate( current_combined_date = pmin(discontinuation_date, switch_date, departure_date))
+    mutate( current_combined_date = pmin(discontinuation_date, switch_date, departure_date + 31))
   
   current_outcome_dataset <-   
     pre_data %>% 
@@ -691,8 +725,8 @@ Follow_OT_func <- function(input, specific){
     # index for on-treatment period (current outcome)
     #==================================================================#
     left_join( select( check_dup_diagnosis, idp, dia_cod, dia_start_date), by = "idp") %>%
-    left_join( select( catalog_clear, cod, English_label, variable_group), by = c("dia_cod" = "cod")) %>% 
-    rename( disease_name = English_label, disease_group = variable_group) %>% 
+    left_join( select( catalog_clear, cod, Composite_label, variable_group), by = c("dia_cod" = "cod")) %>% 
+    rename( disease_name = Composite_label, disease_group = variable_group) %>% 
     
     mutate( outcome_occur_record = case_when( dia_start_date > first_bill_time & current_combined_date >= dia_start_date & disease_name == specific ~ 1,
                                               TRUE ~ 0)) %>%
@@ -722,10 +756,10 @@ Follow_OT_func <- function(input, specific){
 }
 
 #running function
-OT_outcomes_list <- plyr::llply( specific_outcome, Follow_OT_func, input = First_billing_dataset) 
+OT_outcomes_list <- plyr::llply( c("composite_CVD"), Follow_OT_func, input = First_billing_dataset) 
+names(OT_outcomes_list) <- c("composite_CVD", "fracturas", "all_cause_mortality")
 
 OT_outcomes_dataframe <- bind_rows( OT_outcomes_list, .id = "outcome_label")
-
 
 # save(OT_outcomes_dataframe, file="R_datasets/OT_outcomes_dataframe.RData")
 
@@ -740,7 +774,7 @@ Follow_ITT_func <- function(input, specific){
     input %>% 
     select( idp, first_bill_drug, first_bill_time) %>% 
     left_join( select( demography, idp, departure_date), by = "idp") %>% 
-    mutate( one_year_combined_date = pmin(departure_date, first_bill_time + 365))
+    mutate( one_year_combined_date = pmin(departure_date + 31, first_bill_time + 365))
   
   one_year_outcome_dataset <-   
     pre_data %>% 
@@ -1004,18 +1038,19 @@ bb <-
 
 
 # Cox-model outcome stratification (OT) ------------------------------------------------
-
 cox_dataset_OT <- 
   Mathced_new_user_cohort %>% 
   select( idp, first_bill_drug) %>% 
-  left_join(OT_outcomes_dataframe, by = "idp")
+  left_join( OT_outcomes_dataframe, by = "idp") %>% 
+  left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>% 
+  mutate( calendar_year = substring( first_bill_time,1,4)) 
 
 
 res.separate_func <- function(input){
   lapply( split(input, list(input$outcome_label, input$group_label)),
           FUN = function(DF) {
             coxph( Surv(follow_up_days, outcome_occur_subject) ~ 
-                     first_bill_drug ,
+                     first_bill_drug + calendar_year,
                    data =  DF)
           })}
 
@@ -1027,13 +1062,13 @@ survial_hazard_func <- function(input){
     # p.value<-signif(dt$wald["pvalue"], digits=2)
     # wald.test<-signif(x$wald["test"], digits=3)
     # beta<-signif(x$coef[1], digits=3);#coeficient beta
-    sd <- signif(dt$coef[3], digits=3);
-    HR <-dt$coef[2];#exp(beta)
-    HR.confint.lower <-dt$conf.int[,"lower .95"]
-    HR.confint.upper <- dt$conf.int[,"upper .95"]
+    P_value <- dt$coefficients["first_bill_drug", "Pr(>|z|)"];
+    HR <-dt$conf.int["first_bill_drug","exp(coef)"]
+    HR.confint.lower <-dt$conf.int["first_bill_drug","lower .95"]
+    HR.confint.upper <- dt$conf.int["first_bill_drug","upper .95"]
     # CI <- paste0(HR, " (", HR.confint.lower, "-", HR.confint.upper, ")")
-    res<-c( HR , sd, HR.confint.lower, HR.confint.upper)
-    names(res)<-c( "estimate", "stderr", "lower", "upper")
+    res<-c( HR , P_value, HR.confint.lower, HR.confint.upper)
+    names(res)<-c( "estimate", "P_value","lower", "upper")
     return(res)
     #return(exp(cbind(coef(x),confint(x)))) 
   }) %>% 
@@ -1042,8 +1077,10 @@ survial_hazard_func <- function(input){
     tibble::rownames_to_column() %>% 
     rename( variable = rowname) %>% 
     mutate( CI = paste(substring(estimate, 1,str_locate(as.character(estimate), "[.]")[,1] + 2), " (",
-                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), "-",
-                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")"))}
+                       substring(lower, 1,str_locate(as.character(lower), "[.]")[,1] + 2), " to ",
+                       substring(upper, 1,str_locate(as.character(upper), "[.]")[,1] + 2), ")", sep = ""),
+            P_value_format = case_when( P_value <0.001 ~ "<0.001",
+                                        TRUE ~ paste( substring( P_value, 2, str_locate( as.character(P_value), "[.]")[,1] + 3))))}
 
 OT_survial_hazard <- survial_hazard_func(input = res.separate)
 
@@ -1057,15 +1094,21 @@ summary_table_func <- function( inputdata){
     summarise(n = n(), 
               # mean_age = mean( initiation_age), 
               events = sum( outcome_occur_subject), 
-              mean_follow = as.numeric( mean(follow_up_days))) %>% 
+              mean_follow = as.numeric( mean(follow_up_days)/365), 
+              total_follow = as.numeric( sum(follow_up_days)/365)) %>% 
     group_by(outcome_label, group_label) %>% 
-    mutate( rate = events / (n * mean_follow /365) * 1000 ) %>% 
+    mutate( rate = events / (n * mean_follow) * 1000 ) %>% 
     mutate( ratio = rate[2] / rate[1]) %>% 
-    mutate( diff = rate[2] - rate[1]) %>% 
+    mutate( dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$estimate * 1000) %>% 
+    mutate( low_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[1] * 1000) %>% 
+    mutate( high_dif = ratedifference( events[2], events[1], total_follow[2], total_follow[1])$conf.int[2] * 1000) %>% 
     
-    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2)) %>% 
+    mutate( mean_follow = substring(mean_follow, 1,str_locate(as.character(mean_follow), "[.]")[,1] + 2),
+            total_follow = substring(total_follow, 1,str_locate(as.character(total_follow), "[.]")[,1] -1) )%>% 
     mutate( rate = substring(rate, 1,str_locate(as.character(rate), "[.]")[,1] + 2),
-            diff = substring(diff, 1,str_locate(as.character(diff), "[.]")[,1] + 2))
+            dif_CI = paste(substring(dif, 1,str_locate(as.character(dif), "[.]")[,1] + 2), " (",
+                           substring(low_dif, 1,str_locate(as.character(low_dif), "[.]")[,1] + 2), " to ",
+                           substring(high_dif, 1,str_locate(as.character(high_dif), "[.]")[,1] + 2), ")", sep = ""))
   
   return(summary_table)
 }
@@ -1074,19 +1117,26 @@ OT_survial_event <- summary_table_func( inputdata = cox_dataset_OT)
 # #==================================================================#
 # # combine all statistics 
 # #==================================================================#
-
 OT_survial_summary <- 
   filter( OT_survial_event, first_bill_drug ==0) %>% 
   left_join( filter( OT_survial_event, first_bill_drug ==1), by = c("outcome_label", "group_label")) %>% 
   mutate( variable = paste( outcome_label,group_label, sep = ".")) %>% 
   left_join( OT_survial_hazard, by = "variable") %>% 
-  ungroup()
+  ungroup() %>% 
+  mutate( RD_estimate = as.numeric(rate.x) * (estimate - 1  ),
+          RD_lower = as.numeric(rate.x) * (lower - 1  ),
+          RD_upper = as.numeric(rate.x) * (upper - 1  ),) %>% 
+  mutate( RD_CI = paste(substring(RD_estimate, 1,str_locate(as.character(RD_estimate), "[.]")[,1] + 2), " (",
+                        substring(RD_lower, 1,str_locate(as.character(RD_lower), "[.]")[,1] + 2), " to ",
+                        substring(RD_upper, 1,str_locate(as.character(RD_upper), "[.]")[,1] + 2), ")", sep = ""))
+
+
 
 
 
 # Cox-model outcome stratification (ITT) ------------------------------------------------
 cox_dataset_ITT <- 
-  Mathced_new_user_cohort_PS_trimming %>% 
+  Mathced_new_user_cohort_continuous_bill %>% 
   select( idp, first_bill_drug) %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  
@@ -2065,10 +2115,19 @@ ggplot( data = aa, aes( x = group_label, y = dif))+
 #==================================================================#
 sensitivity_table <- 
   ITT_survial_summary %>% 
-  select( outcome_label,  n.y, total_follow.y, events.y,  rate.y, n.x, total_follow.x, events.x,rate.x,  RD_CI, CI,  P_value_format) %>% 
+  select( outcome_label,  n.y, total_follow.y, events.y,  rate.y, n.x, total_follow.x, events.x,rate.x,  CI,  P_value_format) %>% 
   mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality",
                                                               "falls", "constipation",  "sleep_disorders", "delirium"))) %>% 
   arrange( outcome_label)
+
+
+sensitivity_table <- 
+  OT_survial_summary %>% 
+  select( outcome_label,  n.y, total_follow.y, events.y,  rate.y, n.x, total_follow.x, events.x,rate.x,  CI,  P_value_format) %>% 
+  mutate( outcome_label = factor( outcome_label, levels = c("composite_CVD", "fracturas",  "all_cause_mortality",
+                                                            "falls", "constipation",  "sleep_disorders", "delirium"))) %>% 
+  arrange( outcome_label)
+
 
 
 # Conditional ITT test ----------------------------------------------------
