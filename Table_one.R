@@ -60,15 +60,15 @@ setwd("D:/DPhil/Project_Opioid_use/Analysis/Comparative effectiveness and safety
 #derived datasets
 load("R_datasets/stage_two_saved_data.RData")
 # Baseline table one ----------------------------------------------------------
-dput(names(Base_new_user_cohort_probability))
+dput(names(MSK_new_user_cohort))
 # data preparation including label, unit, format etc.
 
 #first check the missing value of each variable
 
-sapply(Base_new_user_cohort_imputed_single, function(x)sum(is.na(x)))
+sapply( MSK_new_user_cohort, function(x)sum(is.na(x)))
 
 Before_match_cohort <- 
-  Base_new_user_cohort_imputed_single %>% 
+  MSK_new_user_cohort %>% 
   mutate( age_group = factor(case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                  initiation_age >= 40 & initiation_age < 60 ~ "40-59",
                                  initiation_age >= 60  ~ ">=60"), levels = c( "18-39", "40-59",  ">=60"))) %>%
@@ -94,7 +94,7 @@ Before_match_cohort <-
   
 names(Before_match_cohort)
 After_match_cohort <- 
-  Mathced_new_user_cohort_single %>% 
+  Mathced_new_MSK_user_cohort %>% 
   mutate( age_group = factor(case_when( initiation_age >= 18 & initiation_age < 40 ~ "18-39",
                                         initiation_age >= 40 & initiation_age < 60 ~ "40-59",
                                         initiation_age >= 60  ~ ">=60"), levels = c( "18-39", "40-59",  ">=60"))) %>%

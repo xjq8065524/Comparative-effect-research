@@ -207,9 +207,9 @@ ITT_forest <-
   ungroup() %>% 
   add_row( outcome_label = c("Primary outcomes", "Secondary outcomes")) %>% 
   mutate( outcome_label = factor( outcome_label, 
-                                  levels = c("Primary outcomes", "myocardial_infarction","stroke",  "fracturas",  "all_cause_mortality",
+                                  levels = c("Primary outcomes", "composite_CVD","stroke",  "fracturas",  "all_cause_mortality",
                                              "Secondary outcomes", "cardiac_arrhythmia", "constipation",  "delirium", "sleep_disorders", "falls", "opioid_abuse"),
-                                  labels = c("Primary outcomes", "Myocardial infarction","Stroke",  "Fracture",  "All-cause mortality",
+                                  labels = c("Primary outcomes", "Composite CVEs","Stroke",  "Fracture",  "All-cause mortality",
                                              "Secondary outcomes  ","Cardiac arrhythmia", "Constipation",  "Delirium", "Sleep disorders", "Fall", "Opioid abuse"))) %>% 
   # 
   # mutate(stage = factor( stage, levels = c( "space","On-treatment","Intention-to-treatment"))) %>% 
@@ -242,7 +242,56 @@ tabletext<-cbind(
   )
   
 
-
+test <- function(){
+  forestplot(
+    labeltext=tabletext,
+    graph_data,
+    new_page = TRUE,
+    align = c(rep("l",8)),
+    
+    txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 8, cex = 0.68),
+                      ticks = gpar( fontfamily = "sans", fontsize = 8, cex = 0.68),
+                      xlab = gpar( fontfamily = "sans", fontsize = 8, cex = 0.68)),
+    
+    is.summary = c(rep(TRUE,3), ITT_forest$bold),
+    boxsize = 0.25,
+    col=fpColors(box=c("royalblue"), line=c("royalblue"), zero = "black"),
+    
+    colgap = unit(1.5, "mm"),
+    
+    
+    graphwidth = unit(38, "mm"),
+    lineheight = unit(4.2, "mm"),
+    
+    
+    # graph.pos = 9,
+    # hrzl_lines = list("1" = gpar(lty=1, lwd=0.5, columns=c(1:13)),
+    #                   "2" = gpar(lty=1, lwd=0.5, columns=c(4:5, 7:8)),
+    #                   "4" = gpar(lty=1, lwd=0.5, columns=c(1:13)),
+    #                   "6" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "7" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "8" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "9" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "11" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "12" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "13" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "14" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "15" = gpar(lty=1, lwd=0.5, columns=c(1:12), col = "grey"),
+    #                   "16" = gpar(lty=1, lwd=0.5, columns=c(1:12))
+    # ),
+    
+    lwd.xaxis = 0.5,
+    lwd.zero = gpar(lwd=0.5),
+    clip=c(0.5,3.5), 
+    xticks = c( 0.5, 1, 1.5, 2, 3, 4),
+    xticks.digits = 1,
+    
+    xlab = "Hazard Ratio (95% CI)",
+    
+    xlog=TRUE)
+  
+}
+test()
 
 
 tiff(file = 'Figures/forestplot_main_results.tiff',
@@ -351,6 +400,106 @@ dev.off()
 
 
 
+
+
+# ITT primary table (24/06)-------------------------------------------------------
+ITT_forest <- 
+  ITT_survial_summary %>% 
+  ungroup() %>% 
+  mutate( outcome_label = factor( outcome_label, 
+                                  levels = c("composite_CVD", "fracturas",  "all_cause_mortality",
+                                              "constipation", "falls", "sleep_disorders",  "delirium", "opioid_abuse"),
+                                  labels = c("Cardiovascular events ", "Fracture",  "All-cause mortality",
+                                              "Constipation", "Fall","Sleep disorders",   "Delirium", "Opioid abuse"))) %>% 
+  # 
+  # mutate(stage = factor( stage, levels = c( "space","On-treatment","Intention-to-treatment"))) %>% 
+  mutate(bold = case_when( is.na(group_label) ~ TRUE,
+                           TRUE ~ FALSE)) %>% 
+  arrange( outcome_label)
+# Cochrane data from the 'rmeta'-package
+graph_data <- 
+  structure(list(
+    mean  = c(NA, NA, NA, NA,as.numeric(ITT_forest$estimate)), 
+    lower = c(NA, NA, NA, NA,as.numeric(ITT_forest$lower)),
+    upper = c(NA, NA, NA, NA,as.numeric(ITT_forest$upper))),
+    .Names = c("mean", "lower", "upper"), 
+    row.names = c(NA, -(nrow(ITT_forest) + 4)), 
+    class = "data.frame")
+
+tabletext<-cbind( 
+  c("", "", "", "Outcomes", as.character(ITT_forest$outcome_label)),
+  # c("", "No. at", "Risk", ITT_forest$n.x),
+  # c(rep("  ", nrow(ITT_forest) + 3)),
+  c("Tramadol", "(n = 203164)", "No. of",  "Events", ITT_forest$events.y),
+  c("", "", "Incidence", "Rate", ITT_forest$rate.y),
+  c(rep("  ", nrow(ITT_forest) + 4)),
+  c("Codeine", "(n = 203164)", "No. of", "Events", ITT_forest$events.x),
+  c("",  "", "Incidence", "Rate", ITT_forest$rate.x),
+  c(rep("  ", nrow(ITT_forest) + 4)),
+  c("", "", "Rate Difference", "(95% CI)", ITT_forest$dif_CI.x),
+  c(rep("  ", nrow(ITT_forest) + 4)),
+  c("", "", "Hazard Ratio", "(95% CI)", ITT_forest$CI)
+)
+
+
+
+png(file = 'Figures/Primary_results.png',
+     units = "cm",
+     width = 18.2,
+     height = 8,
+     res = 800)
+
+test <- function(){
+  forestplot(
+    labeltext=tabletext,
+    graph_data,
+    new_page = TRUE,
+    align = c(rep("l",7), "c", "c", "c"),
+    
+    txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 7),
+                      ticks = gpar( fontfamily = "sans", fontsize = 7),
+                      xlab = gpar( fontfamily = "sans", fontsize = 10)),
+    
+    is.summary = c(rep(TRUE,4), ITT_forest$bold),
+    boxsize = 0.25,
+    col=fpColors(box=c("royalblue"), line=c("royalblue"), zero = "black"),
+    
+    colgap = unit(1.5, "mm"),
+    
+    
+    graphwidth = unit(38, "mm"),
+    lineheight = unit(6, "mm"),
+    
+    
+    graph.pos = 11,
+    hrzl_lines = list("1" = gpar(lty=1, lwd=0.5, columns=c(1:10)),
+                      "3" = gpar(lty=1, lwd=0.5, columns=c(2:3, 5:6)),
+                      "5" = gpar(lty=1, lwd=0.5, columns=c(1:10)),
+                      "6" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "7" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "8" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "9" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "10" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "11" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "12" = gpar(lty=1, lwd=0.5, columns=c(1:10), col = "grey"),
+                      "13" = gpar(lty=1, lwd=0.5, columns=c(1:10))
+    ),
+    
+    lwd.xaxis = 0.5,
+    lwd.zero = gpar(lwd=0.5),
+    clip=c(0.2,5), 
+    xticks = c( 0.2, 0.5, 1, 1.5, 2.5, 5),
+    xticks.digits = 1,
+    xlab = "Hazard Ratio (95% CI)\n <---Favor Tramadol   Favor Codeine--->",
+    
+    xlog=TRUE)
+  
+}
+test()
+
+dev.off()
+
+
 # Interaction in ITT ------------------------------------------------------
 c("composite_CVD", "fracturas", "all_cause_mortality")
 
@@ -361,8 +510,8 @@ plot_data_preparation <- function( outcome){
     ungroup() %>% 
     add_row( outcome_label = c(unique(survial_summary$outcome_label))) %>% 
     mutate( outcome_label = factor( outcome_label, 
-                                    levels = c("initiation_age", "sex",  "cancer","any_pain", "any_MSK",  "cci_group", "any_Psychotropic", "any_NSAIDs", "overall" ),
-                                    labels = c("Age", "Sex",  "Cancer", "Chronic pain", "Musculoskeletal diseases", "Charlson comorbidity index", "Psychotropic drug use", "Other analgesics use","Overall"))) %>% 
+                                    levels = c("initiation_age", "sex",  "cancer","any_pain",  "cough", "any_MSK", "cci_group", "any_Psychotropic", "any_NSAIDs", "overall" ),
+                                    labels = c("Age", "Sex",  "Cancer", "Back pain",  "Chronic cough", "Musculoskeletal diseases", "Charlson comorbidity index", "Psychotropic drug use", "Other analgesics use","Overall"))) %>% 
     #in order to set NA as an separate factor level
     mutate( group_label = case_when(is.na(group_label) ~ " ",
                                     TRUE ~ group_label)) %>% 
@@ -616,7 +765,6 @@ fracturas <- plot_data_preparation( outcome = "fracturas")
 all_cause_mortality <- plot_data_preparation( outcome = "all_cause_mortality")
 
 
-
 plot_func_interaction <- function(input){
   forestplot(input$tabletext, 
              input$graph_data,
@@ -778,6 +926,168 @@ dev.off()
 
 
 
+# Interaction in ITT (24/06) ------------------------------------------------------
+c("composite_CVD", "fracturas", "all_cause_mortality")
+
+plot_data_preparation <- function( outcome){
+  interaction_forest <- 
+    survial_summary %>% 
+    filter( separate_label == outcome) %>% 
+    ungroup() %>% 
+    add_row( outcome_label = c(unique(survial_summary$outcome_label))) %>% 
+    mutate( outcome_label = factor( outcome_label, 
+                                    levels = c("initiation_age", "sex",  "cancer","any_pain", "cough", "any_MSK",   "cci_group", "any_Psychotropic", "any_NSAIDs", "overall" ),
+                                    labels = c("Age", "Sex",  "Cancer", "Chronic pain","Chronic cough", "MSK diseases", "Charlson index", "Psychotropic drug use", "Other analgesics use","Overall"))) %>% 
+    #in order to set NA as an separate factor level
+    mutate( group_label = case_when(is.na(group_label) ~ " ",
+                                    TRUE ~ group_label)) %>% 
+    mutate( group_label = factor(group_label,
+                                 levels = c(" ", "overall", "18-39", "40-59", ">=60", "H", "D",  "1", "0", "0dis", "1-2dis", ">=3dis"),
+                                 labels = c(" ", "Overall", "  18-39", "  40-59", "  >=60", "  Male", "  Female", "  Yes", "  No",  "  0", "  1-2", "  >=3"))) %>% 
+    
+    mutate( label = case_when( group_label == " " ~ as.character(outcome_label),
+                               TRUE ~ as.character(group_label))) %>% 
+    # 
+    # mutate(stage = factor( stage, levels = c( "space","On-treatment","Intention-to-treatment"))) %>% 
+    mutate(bold = case_when( group_label == " " ~ TRUE,
+                             TRUE ~ FALSE)) %>%
+    mutate( label = case_when( label == "Overall" & is.na(CI) ~ NA_character_,
+                               TRUE ~ label)) %>% 
+    mutate( bold = case_when( label == "Overall" & bold == FALSE ~ TRUE,
+                              TRUE ~ bold)) %>% 
+    arrange( outcome_label, group_label) %>% 
+    mutate( box = case_when( row_number() == n() ~ 0.3,
+                             TRUE ~ 0.25)) 
+  
+  
+  # Cochrane data from the 'rmeta'-package
+  graph_data <- 
+    structure(list(
+      mean  = c(NA, NA, as.numeric(interaction_forest$estimate)), 
+      lower = c(NA, NA,  as.numeric(interaction_forest$lower)),
+      upper = c(NA, NA,  as.numeric(interaction_forest$upper))),
+      .Names = c("mean", "lower", "upper"), 
+      row.names = c(NA, -(nrow(interaction_forest) + 2)), 
+      class = "data.frame")
+  
+  tabletext<-cbind( 
+    c("", "Subgroup", interaction_forest$label),
+    # c(rep("  ", nrow(interaction_forest) + 3)),
+    c("Incidence Rate", "Tramadol", interaction_forest$rate.y),
+    c("", "Codeine",interaction_forest$rate.x),
+    c("Hazard Ratio", "(95% CI)", interaction_forest$CI),
+    c(rep("  ", nrow(interaction_forest) + 2)))
+  
+  
+  # 
+  # tabletext<-cbind( 
+  #   c("", "Subgroup", "", interaction_forest$label),
+  #   c("Tramadol/codeine", "No. at risk", "", paste(interaction_forest$n.y, interaction_forest$n.x, sep = "/")),
+  #   c("  ", "No. of events", "per 1000 Person-years", paste(interaction_forest$rate.y, interaction_forest$rate.x, sep = "/")))
+  #   # c("Tramadol vs Codeine", "Hazard ratio", "(95% CI)", interaction_forest$CI))
+  
+  tabletext[tabletext == "NA (NA)"] <- NA
+  
+  # tabletext<-cbind( 
+  #   c("", "Subgroup", "", interaction_forest$label),
+  #   c("Tramadol", "N. at risk", "", interaction_forest$n.y),
+  #   c("", "No. of Events", "(1000 Person-years)", interaction_forest$rate.y),
+  #   c(rep(NA, nrow(interaction_forest) + 3)),
+  #   c("Codeine", "N. at risk", "", interaction_forest$n.x),
+  #   c("", "No. of Events", "(1000 Person-years)", interaction_forest$rate.x),
+  #   c("Tramadol vs Codeine", "Hazard ratio", "(95% CI)", interaction_forest$CI))
+  
+  return(plot_data = list(interaction_forest = interaction_forest, graph_data = graph_data, tabletext = tabletext))
+}
+
+composite_CVD <- plot_data_preparation( outcome = "composite_CVD")
+fracturas <- plot_data_preparation( outcome = "fracturas")
+all_cause_mortality <- plot_data_preparation( outcome = "all_cause_mortality")
+
+
+plot_func_interaction <- function(input){
+  forestplot(input$tabletext, 
+             input$graph_data,
+             align = c("l","l","l","c"),
+             new_page = TRUE,
+             
+             txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 8),
+                               ticks = gpar( fontfamily = "sans", fontsize = 8),
+                               xlab = gpar( fontfamily = "sans", fontsize = 9)),
+             is.summary = c(rep(TRUE,2), rep(FALSE, length(input$interaction_forest$bold))),
+             boxsize = c(rep(TRUE,3), input$interaction_forest$box),
+             col=fpColors( box=c("black"), 
+                           line=c("black"), 
+                           zero = "black", 
+                           summary = "black"),
+             
+             colgap = unit(2, "mm"),
+             graphwidth = unit(35, "mm"),
+             lineheight = unit( 4.2, "mm"),
+             graph.pos = 5,
+             hrzl_lines = list(
+               "1" = gpar(lty=1, lwd=1, columns=c(1:4)),
+               "2" = gpar(lty=1, lwd=1, columns=c(2:3)),
+               "3" = gpar(lty=1, lwd=1, columns=c(1:4)),
+               # "4" = gpar(lty=1, lwd=0.5, columns=c(1: 4)),
+               "5" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "6" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "9" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "12" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "15" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "18" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "21" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "24" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "25" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "28" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "31" = gpar(lty=1, lwd=0.5, columns=c(1:4), col = "grey"),
+               "34" = gpar(lty=1, lwd=1, columns=c(1:4))
+                           ),
+             lwd.xaxis = 1,
+             lwd.zero = gpar(lwd=1),
+             clip=c(0.5, 2.5), 
+             xticks = c(0.25, 1, 2, 4),
+             grid = structure( input$graph_data$mean[nrow(input$graph_data)], gp = gpar(lty =2, lwd=1, col = "grey")),
+             
+             xlab = "Hazard Ratio (95% CI\n <---Favor Tramadol   Favor Codeine--->",
+             xlog=TRUE)
+}
+
+plot_func_interaction(input = composite_CVD)
+plot_func_interaction(input = fracturas)
+plot_func_interaction(input = all_cause_mortality)
+
+
+
+png(file = 'Figures/PS_subgroup_mortality.png',
+    units = "cm",
+    width = 14,
+    height = 14,
+    res = 300)
+
+plot_func_interaction(input = all_cause_mortality)
+
+dev.off()  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Dose-response in ITT ----------------------------------------------------
 
 
@@ -792,10 +1102,14 @@ interaction_forest <-
           lower = case_when( first_bill_drug == 0 ~ NA_real_,
                                 TRUE ~ lower),
           upper = case_when( first_bill_drug == 0 ~ NA_real_,
-                                TRUE ~ upper)) %>% 
+                                TRUE ~ upper),
+          dif_CI = case_when( first_bill_drug == 0 ~ NA_character_,
+                             TRUE ~ dif_CI),
+          CI = case_when( first_bill_drug == 0 ~ NA_character_,
+                             TRUE ~ CI)) %>% 
   mutate( outcome_label = as.character(outcome_label)) %>% 
   add_row( outcome_label = c(unique( as.character(MPR_survial_summary$outcome_label)))) %>% 
-  mutate( group_label = case_when( is.na(group_label) ~ "Initial prescription of tramadol, packages",
+  mutate( group_label = case_when( is.na(group_label) ~ "Initial prescription of tramadol",
                                    TRUE  ~ group_label)) %>% 
   add_row( outcome_label = c(unique( as.character(MPR_survial_summary$outcome_label)))) %>% 
   mutate( group_label = factor(case_when( is.na(group_label) ~ "NA",
@@ -803,13 +1117,15 @@ interaction_forest <-
                                           group_label == "env_2" ~ "2",
                                           group_label == "env_3" ~ ">=3",
                                           TRUE  ~ group_label),
-                               levels = c( "NA","Initial prescription of tramadol, packages", "1", "2", ">=3", "Reference [codeine]"),
-                               labels = c( "NA","Initial prescription of tramadol, packages", "  1", "  2", "  >=3", "  Reference [codeine]"))) %>% 
+                               levels = c( "NA","Initial prescription of tramadol", "1", "2", ">=3", "Reference [codeine]"),
+                               labels = c( "NA","Initial prescription of tramadol", "   1 pack", "   2 pack", "   >=3 pack", "   Reference [codeine]"))) %>% 
   mutate( outcome_label = factor( outcome_label, 
                                   levels = c("composite_CVD", "fracturas", "all_cause_mortality"),
                                   labels = c("Composite CVD events", "Fractures", "All cause mortality"))) %>% 
   mutate( label = case_when( group_label == "NA" ~ as.character(outcome_label),
                              TRUE ~ as.character(group_label))) %>% 
+  mutate( bold = case_when( group_label == "NA" ~ TRUE,
+                            TRUE ~ FALSE)) %>% 
   arrange( outcome_label, group_label)
   
  
@@ -830,8 +1146,7 @@ interaction_forest <-
     c("No. of", "Events", interaction_forest$events),
     c("Incidence", "Rate", interaction_forest$rate),
     c("Risk Difference", "(95% CI)", interaction_forest$dif_CI),
-    c("Hazard Ratio", "(95% CI)",interaction_forest$CI),
-    c(rep("  ", nrow(interaction_forest) + 2)))
+    c("Hazard Ratio", "(95% CI)",interaction_forest$CI))
   
   
   tabletext[tabletext == "NA (NA)"] <- NA
@@ -841,44 +1156,43 @@ interaction_forest <-
   plot_func_interaction <- function(input){
     forestplot(input$tabletext, 
                input$graph_data,
-               # align = c("l","l","l","l"),
+               align = c("l","l","l","l", "l", "l"),
                new_page = TRUE,
                
-               txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 6),
+               txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 8),
                                  ticks = gpar( fontfamily = "sans", fontsize = 8),
                                  xlab = gpar( fontfamily = "sans", fontsize = 8)),
-               # is.summary = c(rep(TRUE,3), rep(FALSE, length(input$interaction_forest$bold))),
-               # boxsize = c(rep(TRUE,3), input$interaction_forest$box),
+               is.summary = c(rep(TRUE,2),input$interaction_forest$bold),
+               boxsize = 0.3,
                col=fpColors( box=c("royalblue"), 
                              line=c("royalblue"), 
                              zero = "black", 
                              summary = "royalblue"),
                
-               colgap = unit(0, "mm"),
-               graphwidth = unit(25, "mm"),
-               lineheight = unit( 3.2, "mm"),
-               graph.pos = 6,
-               # hrzl_lines = list(
-               #   "1" = gpar(lty=1, lwd=0.5, columns=c(1:6)),
-               #   "3" = gpar(lty=1, lwd=0.5, columns=c(2:4)),
-               #   # "3" = gpar(lty=1, lwd=0.5, columns=c(2:6)),
-               #   "4" = gpar(lty=1, lwd=0.5, columns=c(1: 6)),
-               #   "6" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "7" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "10" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "13" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "16" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "19" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "22" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "25" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "26" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "29" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
-               #   "32" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey")
-               # ),
+               colgap = unit(5, "mm"),
+               graphwidth = unit(35, "mm"),
+               lineheight = unit( 3.8, "mm"),
+               graph.pos = 7,
+               hrzl_lines = list(
+                 "1" = gpar(lty=1, lwd=0.5, columns=c(1:7)),
+                 "3" = gpar(lty=1, lwd=0.5, columns=c(1:7)),
+                 "6" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+                 "7" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+                 "8" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+                 "9" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey")
+                 # "13" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "16" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "19" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "22" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "25" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "26" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "29" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+                 # "32" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey")
+               ),
                lwd.xaxis = 0.5,
                lwd.zero = gpar(lwd=0.5),
                clip=c(0.5,3.5), 
-               xticks = c( 0.5, 1, 1.5, 2, 3, 4),
+               xticks = c( 0.5, 1, 1.5, 3, 5),
                # grid = structure( input$graph_data$mean[nrow(input$graph_data)], gp = gpar(lty =2, lwd=0.75, col = "grey")),
                
                xlab = "Hazard Ratio (95% CI)",
@@ -894,6 +1208,132 @@ interaction_forest <-
 
 
 
+# Dose-response in ITT (new) ----------------------------------------------------
+  
+interaction_forest <- 
+  MPR_survial_summary %>% 
+  ungroup() %>%  
+  filter( first_bill_drug == 1 | (first_bill_drug == 0 & group_label == "env_1")) %>% 
+  mutate( group_label = case_when( first_bill_drug == 0 ~ "Ref [Codeine]",
+                                   TRUE ~ group_label)) %>% 
+  mutate( estimate = case_when( first_bill_drug == 0 ~ NA_real_,
+                                TRUE ~ estimate),
+          lower = case_when( first_bill_drug == 0 ~ NA_real_,
+                             TRUE ~ lower),
+          upper = case_when( first_bill_drug == 0 ~ NA_real_,
+                             TRUE ~ upper),
+          dif_CI = case_when( first_bill_drug == 0 ~ NA_character_,
+                              TRUE ~ dif_CI),
+          CI = case_when( first_bill_drug == 0 ~ NA_character_,
+                          TRUE ~ CI)) %>% 
+  mutate( outcome_label = as.character(outcome_label)) %>% 
+  add_row( outcome_label = c(unique( as.character(MPR_survial_summary$outcome_label)))) %>% 
+  mutate( group_label = factor(case_when( is.na(group_label) ~ "NA",
+                                          group_label == "env_1" ~ "1",
+                                          group_label == "env_2" ~ "2",
+                                          group_label == "env_3" ~ ">=3",
+                                          TRUE  ~ group_label),
+                               levels = c( "NA", "1", "2", ">=3", "Ref [Codeine]"),
+                               labels = c( "NA","   1", "   2", "   >=3", "   Ref [Codeine]"))) %>% 
+  mutate( outcome_label = factor( outcome_label, 
+                                  levels = c("composite_CVD", "fracturas", "all_cause_mortality"),
+                                  labels = c("Composite CVD events", "Fractures", "All cause mortality"))) %>% 
+  mutate( label = case_when( group_label == "NA" ~ as.character(outcome_label),
+                             TRUE ~ as.character(group_label))) %>% 
+  mutate( bold = case_when( group_label == "NA" ~ TRUE,
+                            TRUE ~ FALSE)) %>% 
+  arrange( outcome_label, group_label)
+
+
+
+# Cochrane data from the 'rmeta'-package
+graph_data <- 
+  structure(list(
+    mean  = c(NA, NA, as.numeric(interaction_forest$estimate)), 
+    lower = c(NA, NA, as.numeric(interaction_forest$lower)),
+    upper = c(NA, NA, as.numeric(interaction_forest$upper))),
+    .Names = c("mean", "lower", "upper"), 
+    row.names = c(NA, -(nrow(interaction_forest) + 2)), 
+    class = "data.frame")
+
+tabletext<-cbind( 
+  c("Pack of initial", "prescription [Tramadol]",  interaction_forest$label),
+  c("No. of", "Patients", interaction_forest$n),
+  c("No. of", "Events", interaction_forest$events),
+  c("Incidence", "Rate", interaction_forest$rate),
+  c("Risk Difference", "(95% CI)", interaction_forest$dif_CI),
+  c("Hazard Ratio", "(95% CI)",interaction_forest$CI))
+
+
+tabletext[tabletext == "NA (NA)"] <- NA
+
+plot_data = list(interaction_forest = interaction_forest, graph_data = graph_data, tabletext = tabletext)
+
+plot_func_interaction <- function(input){
+  forestplot(input$tabletext, 
+             input$graph_data,
+             align = c("l","l","l","l", "l", "l"),
+             new_page = TRUE,
+             
+             txt_gp = fpTxtGp( label = gpar( fontfamily = "sans", fontsize = 8),
+                               ticks = gpar( fontfamily = "sans", fontsize = 10),
+                               xlab = gpar( fontfamily = "sans", fontsize = 10)),
+             # is.summary = c(rep(TRUE,2),input$interaction_forest$bold),
+             boxsize = 0.25,
+             col=fpColors( box=c("black"), 
+                           line=c("black"), 
+                           zero = "black", 
+                           summary = "black"),
+             
+             colgap = unit(5, "mm"),
+             graphwidth = unit(35, "mm"),
+             lineheight = unit( 4, "mm"),
+             graph.pos = 7,
+             hrzl_lines = list(
+               "1" = gpar(lty=1, lwd=1, columns=c(1:7)),
+               "3" = gpar(lty=1, lwd=1, columns=c(1:7)),
+               "5" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "6" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "7" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "10" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "11" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "12" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "15" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "16" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "17" = gpar(lty=1, lwd=0.25, columns=c(1:6), col = "grey"),
+               "18" = gpar(lty=1, lwd=1, columns=c(1:6))
+               # "13" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "16" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "19" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "22" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "25" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "26" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "29" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey"),
+               # "32" = gpar(lty=1, lwd=0.25, columns=c(1:4), col = "grey")
+             ),
+             lwd.xaxis = 1,
+             lwd.zero = gpar(lwd=0.5),
+             clip=c(0.8,3.5), 
+             xticks = c( 0.8, 1, 1.5, 3, 5),
+             # grid = structure( input$graph_data$mean[nrow(input$graph_data)], gp = gpar(lty =2, lwd=0.75, col = "grey")),
+             
+             xlab = "Hazard Ratio (95% CI)",
+             xlog=TRUE)
+}  
+
+
+png(file = 'Figures/dose.png',
+    units = "cm",
+    width = 18,
+    height = 7,
+    res = 500)
+
+plot_func_interaction( input = plot_data)
+
+dev.off()
+
+  
+  
 # New_package based ITT ---------------------------------------------------
 help( forest)
 data(Olkin95)
