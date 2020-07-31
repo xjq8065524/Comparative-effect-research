@@ -917,9 +917,10 @@ MPR <-
   select( idp, first_bill_drug) %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time, env), by = "idp") %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
-  filter( outcome_label %in%  c("composite_CVD", "fracturas", "all_cause_mortality") ) %>% 
+  filter( outcome_label %in%  c("composite_CVD", "fracturas", "opioid_abuse", "all_cause_mortality") ) %>% 
   mutate( calendar_year = substring( first_bill_time,1,4)) %>% 
   select( -group_label)
+
 
 MPR_data <-   list(env_1 = filter( MPR, (first_bill_drug == 1 & env == 1) | first_bill_drug == 0) ,
                    env_2 = filter( MPR, (first_bill_drug == 1 & env == 2) | first_bill_drug == 0) ,

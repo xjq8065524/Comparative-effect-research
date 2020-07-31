@@ -90,8 +90,10 @@ sub_Denominator <- sample_frac(Denominator_data, 0.1)
 #=======================================================#
 # all registered subjects with billing data after 2007
 #=======================================================#
-MSK_population_codeine <- 
-  Denominator_data %>% 
+
+sub_population <- function( inputdata, groups){
+ MSK_population_codeine <- 
+  inputdata %>% 
   select( idp) %>% 
   left_join( select( billing_delay, -billing_agr), by = "idp") %>% 
   left_join( select( catalog_clear, cod, English_label), by = c("billing_cod" = "cod")) %>% 
@@ -118,13 +120,10 @@ MSK_population_codeine <-
   rename( disease_name = English_label, disease_group = variable_group) %>% 
   group_by( idp) %>% 
 
-  mutate( MSK_indication = case_when( any( disease_name %in%  c("back_pain", "neck_pain", 
-                                                                "fybromialgia", "oa", "rheumatoid_arthritis", "osteoporosis", "other_musculskeletal_disorders") 
-                                           & dia_start_date <= first_bill_time & 
-                                             dia_start_date > first_bill_time -365*3) ~ 1, TRUE ~ 0)) %>% 
+  mutate( MSK_indication = case_when( any( disease_name %in%  groups) 
+                                           & dia_start_date <= first_bill_time  ~ 1, TRUE ~ 0)) %>% 
   distinct( idp, MSK_indication) %>% 
   ungroup()
-
 
 MSK_new_user_idp <- 
   database_population_codeine %>% 
@@ -135,22 +134,30 @@ MSK_new_user_idp <-
           index_continuous_enrolment == 0,# Dispensed both tramadol and codeine on the entry date
           index_history_outcomes == 0,  # No outcomes of interest previous or at the time of the entry date
           MSK_indication == 1)
+ 
+}
+
+Pain_idp <- sub_population(inputdata = Denominator_data, groups = c("back_pain", "neck_pain"))
+MSK_idp <- sub_population(inputdata = Denominator_data, groups = c("fybromialgia", "oa", "rheumatoid_arthritis", "osteoporosis", "other_musculskeletal_disorders"))
+cough_idp <- sub_population(inputdata = Denominator_data, groups = c("cough"))
+
+table(MSK_idp$first_bill_drug)
 
 #==================save=============================================#
 # save(MSK_population_codeine, file="R_datasets/MSK_population_codeine.RData")
 #==================save=============================================#
 
 # Link to imputed covariates ----------------------------------------
-MSK_new_user_cohort <- 
-  MSK_new_user_idp %>% 
+subgroup_new_user_cohort <- 
+  cough_idp %>% 
   select( idp) %>% 
   left_join( Base_new_user_cohort_imputed, by = "idp") 
 
-map_dbl( MSK_new_user_cohort, ~ sum(is.na(.)))
+map_dbl( subgroup_new_user_cohort, ~ sum(is.na(.)))
 
 # Propensity score modelling and matching ----------------------------------------------
 ## Get variables names
-dput( names( MSK_new_user_cohort))
+dput( names( subgroup_new_user_cohort))
 
 impute_covariate <- 
   c( "sex", "economic_level", "rural", "initiation_age", 
@@ -172,16 +179,16 @@ impute_covariate <-
 ## Fit model
 psModel <- glm(reformulate(termlabels = impute_covariate, response = "first_bill_drug"),
                family  = binomial(link = "logit"),
-               data    = MSK_new_user_cohort)
+               data    = subgroup_new_user_cohort)
 
-MSK_new_user_cohort_probability <- 
-  MSK_new_user_cohort %>% 
+subgroup_new_user_cohort_probability <- 
+  subgroup_new_user_cohort %>% 
   mutate( P_tramadol = psModel$fitted.values,
           P_codeine = 1 - psModel$fitted.values)
 
-listMatch <- Matching::Match(Tr       = MSK_new_user_cohort_probability$first_bill_drug,      # Need to be in 0,1
+listMatch <- Matching::Match(Tr       = subgroup_new_user_cohort_probability$first_bill_drug,      # Need to be in 0,1
                              ## logit of PS,i.e., log(PS/(1-PS)) as matching scale
-                             X        = log(MSK_new_user_cohort_probability$P_tramadol / MSK_new_user_cohort_probability$P_codeine),
+                             X        = log(subgroup_new_user_cohort_probability$P_tramadol / subgroup_new_user_cohort_probability$P_codeine),
                              ## 1:1 matching
                              M        = 1,
                              ## caliper = 0.2 * SD(logit(PS))
@@ -190,20 +197,20 @@ listMatch <- Matching::Match(Tr       = MSK_new_user_cohort_probability$first_bi
                              ties     = FALSE,
                              version  = "fast")
 
-Mathced_new_MSK_user_cohort <- MSK_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
-table(Mathced_new_MSK_user_cohort$first_bill_drug)
+Mathced_new_subgroup_user_cohort <- subgroup_new_user_cohort_probability[unlist(listMatch[c("index.treated","index.control")]), ]
+table( Mathced_new_subgroup_user_cohort$first_bill_drug)
 
-
+Mathced_new_cough_user_cohort <- Mathced_new_subgroup_user_cohort
 #==================save=============================================#
 load("R_datasets/Mathced_new_MSK_user_cohort.RData")
+# save(Mathced_new_pain_user_cohort, file="R_datasets/Mathced_new_pain_user_cohort.RData")
 # save(Mathced_new_MSK_user_cohort, file="R_datasets/Mathced_new_MSK_user_cohort.RData")
+# save(Mathced_new_cough_user_cohort, file="R_datasets/Mathced_new_cough_user_cohort.RData")
 #==================save=============================================#
-
-
 
 # Cox-model outcome stratification (ITT) ------------------------------------------------
 cox_dataset_ITT <- 
-  Mathced_new_MSK_user_cohort %>% 
+  Mathced_new_subgroup_user_cohort %>% 
   select( idp, first_bill_drug) %>% 
   left_join( ITT_outcomes_dataframe, by = "idp") %>% 
   left_join( select(First_billing_dataset, idp, first_bill_time), by = "idp") %>%  
